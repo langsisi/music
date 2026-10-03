@@ -150,22 +150,49 @@ covers/          从标签或服务器导出的封面
 ### 一键发布
 
 ```powershell
-# 精简包（目标机需已装 .NET 10 桌面运行时），清单里写相对文件名
+# 默认：包上传到 GitCode Release，清单里的 url 自动指向 <ReleaseBaseUrl>/v<版本>/Music-<版本>.zip
 .\scripts\publish-release.ps1 -Version 1.1.0 -Notes "新增歌词广播"
 
-# 自包含包（体积更大，免装运行时），清单里写完整地址
-.\scripts\publish-release.ps1 -Version 1.1.0 -SelfContained `
-    -FeedBaseUrl https://gitee.com/your-name/music/raw/master -Notes "修复若干问题"
+# 自包含包（体积更大，免装运行时）
+.\scripts\publish-release.ps1 -Version 1.1.0 -SelfContained -Notes "修复若干问题"
+
+# Tag 与包版本不一致时显式指定（默认 Tag = v<版本>）
+.\scripts\publish-release.ps1 -Version 1.1.0 -Tag v1.0.0
+
+# 清单与安装包放在同一个静态目录时，改成写相对文件名
+.\scripts\publish-release.ps1 -Version 1.1.0 -ReleaseBaseUrl '' -Notes "说明"
+
+# 换到别的托管平台
+.\scripts\publish-release.ps1 -Version 1.1.0 `
+    -ReleaseBaseUrl https://gitee.com/your-name/music/releases/download -Notes "说明"
 ```
 
-脚本会做这些事：`dotnet publish`（用 `-p:Version` 注入版本号）→ 剔除 libvlc 里非当前架构的目录 → 剔除 pdb 符号文件（省约 100MB）→ 校验 zip 根目录有 `Music.Desktop.exe` → 打包 → 计算 SHA256 → 生成 `latest.json`。
+脚本会做这些事：`dotnet publish`（用 `-p:Version` 注入版本号）→ 剔除 libvlc 里非当前架构的目录 → 剔除 pdb 符号文件（省约 100MB）→ 校验 zip 根目录有 `Music.Desktop.exe` → 打包 → 计算 SHA256 → **把 `latest.json` 写到仓库根目录**。
 
-产物在 `artifacts/`（已被 `.gitignore` 忽略）：
+产物：
 
 ```
-artifacts/Music-<版本>.zip    约 67MB，解压后覆盖安装目录
-artifacts/latest.json         上传后把直链填到应用「设置 → 在线升级」
+artifacts\Music-<版本>.zip   约 67MB，上传到 Release 附件（artifacts/ 已被 .gitignore 忽略）
+latest.json                  仓库根目录，提交推送后即可被应用读取
 ```
+
+以 `-Version 1.1.0` 为例，生成的清单是：
+
+```json
+{
+  "version": "1.1.0",
+  "url": "https://gitcode.com/evoq58/music/releases/download/v1.1.0/Music-1.1.0.zip",
+  "sha256": "6de8d237b10db9a7da98bef39b354da85453d84fee269ae9bcc8da0259d573f7",
+  "notes": "新增歌词广播"
+}
+```
+
+> **sha256 必须对应你实际上传的那个包**。zip 里含文件时间戳，**重新跑一次脚本产出的包哈希就会变**，所以：改了代码重新发布时，要用本次产出的 zip 覆盖 Release 上的同名文件，否则应用会因「校验失败」丢弃更新。想复核远端包的哈希，可以下载后自己算：
+>
+> ```powershell
+> Invoke-WebRequest 'https://gitcode.com/<owner>/<repo>/releases/download/<tag>/Music-<版本>.zip' -OutFile "$env:TEMP\uploaded.zip"
+> (Get-FileHash "$env:TEMP\uploaded.zip" -Algorithm SHA256).Hash.ToLower()
+> ```
 
 手动发布等价于：
 
@@ -176,6 +203,19 @@ dotnet publish src\Music.Desktop -c Release -f net10.0-windows10.0.19041.0 `
 
 > **最容易踩的坑**：发布时必须让版本号进到程序集（脚本已用 `-p:Version` 处理好）。否则应用始终认为自己是 `1.0.0`，永远检测不到更新。
 
+### 用 GitCode 做升级托管（本项目当前用法）
+
+1. 跑脚本：`.\scripts\publish-release.ps1 -Version 1.1.0 -Notes "新增歌词广播"`
+2. 在 GitCode 用 Tag `v1.1.0` 新建 Release，上传 `artifacts\Music-1.1.0.zip`
+3. 提交并推送仓库根目录的 `latest.json`
+4. 应用「设置 → 在线升级 → 更新地址」填：`https://raw.gitcode.com/evoq58/music/raw/master/latest.json`
+
+注意 GitCode 的 raw 直链要走**独立域名 `raw.gitcode.com`**（`gitcode.com/<owner>/<repo>/raw/...` 对非浏览器客户端会返回网页外壳而不是文件内容），格式为：
+
+```
+https://raw.gitcode.com/{owner}/{repo}/raw/{branch}/{path}
+```
+
 ### 上传到 Gitee / GitCode 等静态服务器
 
 客户端只做「GET 一个 JSON + GET 一个 zip」，不需要 API、鉴权或服务端逻辑，所以任何能直链下载的地方都行（GitHub / Gitee / GitCode / 对象存储 / Cloudflare Pages…）。Gitee 与 GitCode 仓库里文件的 **Raw 直链**即可，不需要 Gitee Pages。
@@ -183,7 +223,7 @@ dotnet publish src\Music.Desktop -c Release -f net10.0-windows10.0.19041.0 `
 注意事项：
 
 1. **单文件上限 100MB**：Gitee 免费仓库单文件上限 100MB，本项目的包约 67MB（已剔除 pdb 与多余架构）。再加平台会超限，建议 zip 放**发行版附件**或对象存储。
-2. **先验证直链**：用无痕浏览器确认能直接下载（有些平台会跳转或限制未登录下载），再填进应用。
+2. **先验证直链**：用无痕浏览器确认能直接下载（有些平台会跳转或限制未登录下载），再填进应用。清单要能返回 JSON 而不是 HTML。
 3. **zip 必须把文件放在根目录**，不能多套一层——升级脚本是「解压到安装目录」，多一层就覆盖不到。脚本已自动校验。
 4. **覆盖只覆盖同名文件，不删除旧文件**：新版删掉的 dll 会残留在安装目录（对 .NET 应用一般无害）。
 5. **安装目录必须可写**：若装在 `C:\Program Files` 会因权限失败，建议装到 `%LOCALAPPDATA%\Programs\Music` 这类用户目录。

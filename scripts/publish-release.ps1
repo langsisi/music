@@ -27,8 +27,12 @@ param(
 
     [string]$Notes = '',
 
-    # 清单里 zip 的地址前缀。留空则写相对文件名（应用会按清单所在目录解析）。
-    [string]$FeedBaseUrl = '',
+    # 发布包所在的 Release 直链前缀。默认指向本仓库的 GitCode Release；
+    # 传空字符串则写成相对文件名（适用于清单与安装包放在同一个静态目录的场景）。
+    [string]$ReleaseBaseUrl = 'https://gitcode.com/evoq58/music/releases/download',
+
+    # Release 的 Tag 名。默认 v<版本>，与包名保持一致，避免 tag 与包版本对不上。
+    [string]$Tag = '',
 
     [string]$Configuration = 'Release',
 
@@ -51,7 +55,9 @@ $artifactsDir = Join-Path $repoRoot 'artifacts'
 $stageDir = Join-Path $artifactsDir "publish-$Version-$Runtime"
 $zipName = "Music-$Version.zip"
 $zipPath = Join-Path $artifactsDir $zipName
-$manifestPath = Join-Path $artifactsDir 'latest.json'
+
+# 清单直接写到仓库根目录，方便提交推送；应用读取它的 raw 直链。
+$manifestPath = Join-Path $repoRoot 'latest.json'
 
 if (-not (Test-Path $project)) {
     throw "找不到项目文件：$project"
@@ -125,10 +131,15 @@ $size = (Get-Item $zipPath).Length
 $sizeMb = [Math]::Round($size / 1MB, 1)
 $sha256 = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
-$packageUrl = if ([string]::IsNullOrWhiteSpace($FeedBaseUrl)) {
+# Tag 默认与版本号一致（v1.1.0），避免出现「tag 是 v1.0.0 但包里是 1.1.0」这种对不上的情况。
+if ([string]::IsNullOrWhiteSpace($Tag)) {
+    $Tag = "v$Version"
+}
+
+$packageUrl = if ([string]::IsNullOrWhiteSpace($ReleaseBaseUrl)) {
     $zipName
 } else {
-    "$($FeedBaseUrl.TrimEnd('/'))/$zipName"
+    "$($ReleaseBaseUrl.TrimEnd('/'))/$Tag/$zipName"
 }
 
 $manifest = [ordered]@{
@@ -144,12 +155,15 @@ $json = $manifest | ConvertTo-Json -Depth 3
 
 # ---------- 7. 汇总 ----------
 Write-Host ''
-Write-Host '==> 发布产物（artifacts/ 已被 .gitignore 忽略）' -ForegroundColor Green
-Write-Host ("    {0,-22} {1,8} MB" -f $zipName, $sizeMb)
-Write-Host ("    {0,-22} {1}" -f 'latest.json', '')
+Write-Host '==> 发布产物' -ForegroundColor Green
+Write-Host ("    {0,-22} {1,8} MB   （上传到 Release 附件）" -f "artifacts\$zipName", $sizeMb)
+Write-Host ("    {0,-22} {1}" -f 'latest.json', '           （提交到仓库根目录）')
 Write-Host ''
-Write-Host "zip 直链 / 文件名 : $packageUrl"
-Write-Host "SHA256            : $sha256"
+Write-Host '清单内容：' -ForegroundColor Cyan
+Write-Host $json
+Write-Host ''
+Write-Host "包地址 : $packageUrl"
+Write-Host "SHA256 : $sha256"
 Write-Host ''
 
 if ($sizeMb -gt 95) {
@@ -162,6 +176,9 @@ if (-not $SelfContained) {
 
 Write-Host ''
 Write-Host '下一步：' -ForegroundColor Yellow
-Write-Host '  1) 把 artifacts/Music-<版本>.zip 上传（建议放发行版附件，或直接提交到仓库）'
-Write-Host '  2) 把 artifacts/latest.json 上传到可以直链访问的位置（例如仓库根目录）'
-Write-Host '  3) 在应用「设置 → 在线升级 → 更新地址」填入 latest.json 的直链'
+Write-Host "  1) 在 GitCode 用 Tag '$Tag' 新建 Release，上传 artifacts\$zipName"
+Write-Host '  2) 提交并推送仓库根目录的 latest.json'
+Write-Host '  3) 应用「设置 → 在线升级 → 更新地址」填 latest.json 的 raw 直链'
+Write-Host ''
+Write-Host '注意：清单里的 sha256 是这次产出的这个包算出来的。如果 GitCode 上已有同名包，' -ForegroundColor Yellow
+Write-Host '      必须用本次产出的 zip 覆盖它，否则哈希对不上，升级会被判定为校验失败并丢弃。' -ForegroundColor Yellow
