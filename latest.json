@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
-  "url": "https://gitcode.com/evoq58/music/releases/download/v1.0.0/Music-1.1.0.zip",
-  "sha256": "e63ee7e3ad36ac2fa20372042c00f44fefe07568c206c59f8b2fbec8b36cc9e6",
-  "notes": "首个版本：本地 / FTP / Navidrome 音源、逐行歌词与局域网广播、收藏与分类、缓存、在线升级"
+    "version":  "1.1.0",
+    "url":  "https://gitcode.com/evoq58/music/releases/download/v1.1.0/Music-1.1.0.zip",
+    "sha256":  "566d238244f341395bed11b722d9a5c73df29151db2543576adc039de0112946",
+    "notes":  "初始版本"
 }
