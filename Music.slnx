@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="src/Music/Music.csproj" />
+  <Project Path="src/Music.Desktop/Music.Desktop.csproj" />
+  <Project Path="src/Music.Android/Music.Android.csproj">
+    <Deploy />
+  </Project>
+</Solution>

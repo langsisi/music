@@ -1,0 +1,154 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:pages="using:Music.ViewModels.Pages"
+             xmlns:vm="using:Music.ViewModels"
+             xmlns:models="using:Music.Models"
+             xmlns:controls="using:Music.Controls"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
+             x:Class="Music.Views.Pages.LibraryView"
+             x:DataType="pages:LibraryViewModel">
+
+    <StackPanel Spacing="14">
+
+        <!-- 搜索 + 播放全部 -->
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0" Width="340" HorizontalAlignment="Left"
+                     PlaceholderText="搜索曲目 / 艺术家 / 专辑"
+                     Text="{Binding SearchText}" />
+            <Button Grid.Column="1" Classes="accent" Content="播放全部"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding HasTracks}"
+                    Command="{Binding PlayAllCommand}" />
+        </Grid>
+
+        <!-- 收藏 / 分类筛选 -->
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <ListBox Classes="chips"
+                     ItemsSource="{Binding Filters}"
+                     SelectedItem="{Binding SelectedFilter}">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="8" />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LibraryFilter">
+                        <TextBlock Text="{Binding Title}" FontSize="13" />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <Button Classes="icon" VerticalAlignment="Center" ToolTip.Tip="删除当前分类"
+                    IsVisible="{Binding CanDeleteCategory}"
+                    Command="{Binding DeleteCategoryCommand}">
+                <Path Data="{x:Static controls:AppIcons.Trash}"
+                      Fill="{DynamicResource TextTertiaryBrush}"
+                      Width="16" Height="16" Stretch="Uniform" />
+            </Button>
+        </StackPanel>
+
+        <!-- 新建分类 -->
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <TextBox Width="200" PlaceholderText="新分类名称"
+                     Text="{Binding NewCategoryName}" />
+            <Button Classes="ghost" Content="新建分类" VerticalAlignment="Center"
+                    Command="{Binding CreateCategoryCommand}" />
+        </StackPanel>
+
+        <Border Classes="card" Padding="8" IsVisible="{Binding !IsEmpty}">
+            <ListBox ItemsSource="{Binding Tracks}"
+                     Background="Transparent" BorderThickness="0"
+                     MaxHeight="520">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TrackRowViewModel">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Height="54" Margin="4,2">
+
+                            <Border Grid.Column="0" Width="42" Height="42" CornerRadius="8"
+                                    ClipToBounds="True"
+                                    Background="{DynamicResource AccentSoftBrush}">
+                                <Image Stretch="UniformToFill"
+                                       Source="{Binding CoverPath, Converter={StaticResource PathToBitmap}}" />
+                            </Border>
+
+                            <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="{Binding DisplayTitle}" FontSize="13.5"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <TextBlock Text="{Binding Subtitle}" FontSize="12"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                            </StackPanel>
+
+                            <!-- 加入 / 移出分类 -->
+                            <Button Grid.Column="2" Classes="icon" VerticalAlignment="Center"
+                                    ToolTip.Tip="加入分类"
+                                    IsVisible="{Binding HasCategories}">
+                                <Path Data="{x:Static controls:AppIcons.Queue}"
+                                      Fill="{DynamicResource TextSecondaryBrush}"
+                                      Width="18" Height="18" Stretch="Uniform" />
+                                <Button.Flyout>
+                                    <Flyout Placement="Top">
+                                        <ItemsControl ItemsSource="{Binding Categories}"
+                                                      MinWidth="160">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:TrackCategoryItem">
+                                                    <Button Classes="bare"
+                                                            Command="{Binding ToggleCommand}">
+                                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                                            <Path Data="{Binding MarkIcon}"
+                                                                  Fill="{DynamicResource AccentBrush}"
+                                                                  Width="16" Height="16" Stretch="Uniform"
+                                                                  VerticalAlignment="Center" />
+                                                            <TextBlock Text="{Binding Name}" FontSize="13"
+                                                                       VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+
+                            <!-- 收藏 -->
+                            <Button Grid.Column="3" Classes="icon" VerticalAlignment="Center"
+                                    ToolTip.Tip="收藏 / 取消收藏"
+                                    Command="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).ToggleFavoriteCommand}"
+                                    CommandParameter="{Binding}">
+                                <Path Data="{Binding FavoriteIcon}"
+                                      Fill="{DynamicResource AccentBrush}"
+                                      Width="18" Height="18" Stretch="Uniform" />
+                            </Button>
+
+                            <!-- 播放 -->
+                            <Button Grid.Column="4" Classes="icon" VerticalAlignment="Center"
+                                    ToolTip.Tip="播放"
+                                    Command="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).PlayTrackCommand}"
+                                    CommandParameter="{Binding}">
+                                <Path Data="{x:Static controls:AppIcons.Play}"
+                                      Fill="{DynamicResource TextSecondaryBrush}"
+                                      Width="18" Height="18" Stretch="Uniform" />
+                            </Button>
+
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <Border Classes="card" Padding="30" IsVisible="{Binding IsEmpty}">
+            <StackPanel Spacing="8" HorizontalAlignment="Center">
+                <Path Data="{x:Static controls:AppIcons.Library}"
+                      Fill="{DynamicResource TextTertiaryBrush}" Stretch="Uniform"
+                      Width="30" Height="30" HorizontalAlignment="Center" />
+                <TextBlock Text="曲库还是空的" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                <TextBlock Text="到「音源」页面添加一个文件夹并扫描" HorizontalAlignment="Center"
+                           FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>

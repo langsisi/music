@@ -1,0 +1,154 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Music.ViewModels"
+             xmlns:controls="using:Music.Controls"
+             mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="760"
+             x:Class="Music.Views.NowPlayingView"
+             x:DataType="vm:MainViewModel">
+
+    <!-- 全屏「正在播放」：覆盖整个外壳，背景不透明以拦截下层交互 -->
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Background="{DynamicResource AppBackgroundBrush}">
+
+        <!-- 顶部装饰渐变 -->
+        <Border Grid.Row="0" Grid.RowSpan="2" Height="260" VerticalAlignment="Top"
+                Opacity="0.22" Background="{StaticResource AccentGradientBrush}" />
+
+        <!-- ============ 顶部栏 ============ -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="12,14">
+            <Button Grid.Column="0" Classes="icon"
+                    Command="{Binding Player.CollapseCommand}"
+                    ToolTip.Tip="收起">
+                <Path Data="{x:Static controls:AppIcons.ChevronDown}"
+                      Fill="{DynamicResource TextPrimaryBrush}"
+                      Width="22" Height="22" Stretch="Uniform" />
+            </Button>
+            <TextBlock Grid.Column="1" Text="正在播放" Classes="section"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Button Grid.Column="2" Classes="icon">
+                <Path Data="{x:Static controls:AppIcons.Queue}"
+                      Fill="{DynamicResource TextPrimaryBrush}"
+                      Width="20" Height="20" Stretch="Uniform" />
+            </Button>
+        </Grid>
+
+        <!-- ============ 封面 + 曲目信息 ============ -->
+        <StackPanel Grid.Row="1" Margin="32,18,32,10" Spacing="16">
+            <Border Height="230" CornerRadius="18" ClipToBounds="True"
+                    Background="{StaticResource AccentGradientBrush}"
+                    HorizontalAlignment="Stretch">
+                <Image Stretch="UniformToFill"
+                       Source="{Binding Player.CoverPath, Converter={StaticResource PathToBitmap}}" />
+            </Border>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="{Binding Player.Title}" Classes="h1" FontSize="24"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Player.Artist}" FontSize="14"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource TextSecondaryBrush}" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ============ 歌词区 ============ -->
+        <Border Grid.Row="2" Margin="32,6,32,10" CornerRadius="14" Padding="8"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1">
+            <Grid>
+                <ListBox x:Name="LyricsList"
+                         ItemsSource="{Binding Player.LyricLines}"
+                         SelectedIndex="{Binding Player.CurrentLyricIndex, Mode=OneWay}"
+                         IsVisible="{Binding Player.HasLyrics}"
+                         Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                            <Setter Property="Padding" Value="10,7" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected">
+                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+                            <Setter Property="Background" Value="Transparent" />
+                        </Style>
+                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                            <Setter Property="Background" Value="Transparent" />
+                        </Style>
+                    </ListBox.Styles>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LyricLineViewModel">
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
+                                       TextAlignment="Center" FontSize="14" LineHeight="21" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <StackPanel IsVisible="{Binding !Player.HasLyrics}"
+                            VerticalAlignment="Center" Spacing="6" Margin="18">
+                    <Path Data="{x:Static controls:AppIcons.Lyrics}"
+                          Fill="{DynamicResource TextTertiaryBrush}" Stretch="Uniform"
+                          Width="26" Height="26" HorizontalAlignment="Center" />
+                    <TextBlock Text="暂无歌词" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBlock Text="把同名 .lrc 文件放在歌曲旁边即可显示"
+                               HorizontalAlignment="Center" FontSize="12" TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Foreground="{DynamicResource TextTertiaryBrush}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============ 传输控制 ============ -->
+        <StackPanel Grid.Row="3" Margin="32,0,32,28" Spacing="14">
+
+            <Grid ColumnDefinitions="48,*,48">
+                <TextBlock Grid.Column="0" Text="{Binding Player.PositionText}"
+                           FontSize="12" VerticalAlignment="Center"
+                           HorizontalAlignment="Right" Margin="0,0,8,0"
+                           Foreground="{DynamicResource TextTertiaryBrush}" />
+                <Slider Grid.Column="1" Minimum="0"
+                        Maximum="{Binding Player.DurationSeconds}"
+                        Value="{Binding Player.PositionSeconds}" />
+                <TextBlock Grid.Column="2" Text="{Binding Player.DurationText}"
+                           FontSize="12" VerticalAlignment="Center"
+                           HorizontalAlignment="Left" Margin="8,0,0,0"
+                           Foreground="{DynamicResource TextTertiaryBrush}" />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
+                <Button Classes="icon" Command="{Binding Player.ToggleShuffleCommand}">
+                    <Path Data="{x:Static controls:AppIcons.Shuffle}"
+                          Fill="{DynamicResource TextSecondaryBrush}"
+                          Width="20" Height="20" Stretch="Uniform" />
+                </Button>
+                <Button Classes="icon" Command="{Binding Player.PreviousCommand}">
+                    <Path Data="{x:Static controls:AppIcons.SkipPrevious}"
+                          Fill="{DynamicResource TextPrimaryBrush}"
+                          Width="26" Height="26" Stretch="Uniform" />
+                </Button>
+                <Button Classes="icon primary" Width="60" Height="60" CornerRadius="30"
+                        Command="{Binding Player.TogglePlayCommand}">
+                    <Path Data="{Binding Player.PlayPauseIcon}"
+                          Fill="White" Width="24" Height="24" Stretch="Uniform" />
+                </Button>
+                <Button Classes="icon" Command="{Binding Player.NextCommand}">
+                    <Path Data="{x:Static controls:AppIcons.SkipNext}"
+                          Fill="{DynamicResource TextPrimaryBrush}"
+                          Width="26" Height="26" Stretch="Uniform" />
+                </Button>
+                <Button Classes="icon" Command="{Binding Player.ToggleFavoriteCommand}">
+                    <Path Data="{Binding Player.FavoriteIcon}"
+                          Fill="{DynamicResource TextSecondaryBrush}"
+                          Width="20" Height="20" Stretch="Uniform" />
+                </Button>
+            </StackPanel>
+
+        </StackPanel>
+
+    </Grid>
+</UserControl>

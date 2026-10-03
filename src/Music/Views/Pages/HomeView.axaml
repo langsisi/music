@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:pages="using:Music.ViewModels.Pages"
+             xmlns:controls="using:Music.Controls"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
+             x:Class="Music.Views.Pages.HomeView"
+             x:DataType="pages:HomeViewModel">
+
+    <StackPanel Spacing="18">
+
+        <!-- 欢迎横幅 -->
+        <Border CornerRadius="18" Padding="26" Background="{StaticResource AccentGradientBrush}">
+            <StackPanel Spacing="6">
+                <TextBlock Text="欢迎使用 Music" FontSize="24" FontWeight="Bold" Foreground="White" />
+                <TextBlock Text="本地音乐 · FTP · Navidrome，一个播放器全部搞定"
+                           FontSize="13" Foreground="#EEFFFFFF" />
+            </StackPanel>
+        </Border>
+
+        <TextBlock Text="音源" Classes="section" />
+
+        <UniformGrid Columns="3" Rows="1">
+            <Border Classes="card" Margin="0,0,14,0" Height="112">
+                <StackPanel Spacing="8">
+                    <Path Data="{x:Static controls:AppIcons.Folder}"
+                          Fill="{DynamicResource AccentBrush}"
+                          Width="24" Height="24" Stretch="Uniform" HorizontalAlignment="Left" />
+                    <TextBlock Text="本地音乐" FontWeight="SemiBold" FontSize="14" />
+                    <TextBlock Text="扫描本机文件夹" Classes="muted" FontSize="12" />
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card" Margin="0,0,14,0" Height="112">
+                <StackPanel Spacing="8">
+                    <Path Data="{x:Static controls:AppIcons.Sources}"
+                          Fill="{DynamicResource AccentBrush}"
+                          Width="24" Height="24" Stretch="Uniform" HorizontalAlignment="Left" />
+                    <TextBlock Text="FTP 服务器" FontWeight="SemiBold" FontSize="14" />
+                    <TextBlock Text="远程音乐库" Classes="muted" FontSize="12" />
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card" Height="112">
+                <StackPanel Spacing="8">
+                    <Path Data="{x:Static controls:AppIcons.Download}"
+                          Fill="{DynamicResource AccentBrush}"
+                          Width="24" Height="24" Stretch="Uniform" HorizontalAlignment="Left" />
+                    <TextBlock Text="Navidrome" FontWeight="SemiBold" FontSize="14" />
+                    <TextBlock Text="自建流媒体服务" Classes="muted" FontSize="12" />
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <TextBlock Text="最近播放" Classes="section" Margin="0,6,0,0" />
+
+        <Border Classes="card" Padding="28">
+            <StackPanel Spacing="6" HorizontalAlignment="Center">
+                <Path Data="{x:Static controls:AppIcons.Queue}"
+                      Fill="{DynamicResource TextTertiaryBrush}"
+                      Width="28" Height="28" Stretch="Uniform" HorizontalAlignment="Center" />
+                <TextBlock Text="还没有播放记录" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource TextSecondaryBrush}" />
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>

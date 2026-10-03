@@ -1,0 +1,122 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Music.ViewModels"
+             xmlns:controls="using:Music.Controls"
+             mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="76"
+             x:Class="Music.Views.PlayerBarView"
+             x:DataType="vm:MainViewModel">
+
+    <Border Height="{StaticResource BottomBarHeight}"
+            Background="{DynamicResource SurfaceAltBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            BorderThickness="0,1,0,0">
+
+        <Grid ColumnDefinitions="*,Auto,*" Margin="14,0">
+
+            <!-- ============ 左：封面 + 曲目信息（点击展开全屏播放页） ============ -->
+            <Button Grid.Column="0" Classes="bare"
+                    HorizontalAlignment="Left"
+                    Command="{Binding Player.ExpandCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <Border Width="44" Height="44" CornerRadius="8" ClipToBounds="True"
+                            Background="{StaticResource AccentGradientBrush}">
+                        <Image Stretch="UniformToFill"
+                               Source="{Binding Player.CoverPath, Converter={StaticResource PathToBitmap}}" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center" MaxWidth="260" Spacing="2">
+                        <TextBlock Text="{Binding Player.Title}"
+                                   FontWeight="SemiBold" FontSize="13.5"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <TextBlock Text="{Binding Player.Artist}"
+                                   FontSize="12" TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Button>
+
+            <!-- ============ 中：传输控制 + 进度（宽屏） ============ -->
+            <StackPanel Grid.Column="1" Width="460"
+                        IsVisible="{Binding IsWide}"
+                        VerticalAlignment="Center" Spacing="2">
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
+                    <Button Classes="icon" Command="{Binding Player.ToggleShuffleCommand}"
+                            ToolTip.Tip="随机播放">
+                        <Path Data="{x:Static controls:AppIcons.Shuffle}"
+                              Fill="{DynamicResource TextSecondaryBrush}"
+                              Width="18" Height="18" Stretch="Uniform" />
+                    </Button>
+
+                    <Button Classes="icon" Command="{Binding Player.PreviousCommand}"
+                            ToolTip.Tip="上一首">
+                        <Path Data="{x:Static controls:AppIcons.SkipPrevious}"
+                              Fill="{DynamicResource TextPrimaryBrush}"
+                              Width="20" Height="20" Stretch="Uniform" />
+                    </Button>
+
+                    <Button Classes="icon primary" Command="{Binding Player.TogglePlayCommand}"
+                            ToolTip.Tip="播放 / 暂停">
+                        <Path Data="{Binding Player.PlayPauseIcon}"
+                              Fill="White" Width="18" Height="18" Stretch="Uniform" />
+                    </Button>
+
+                    <Button Classes="icon" Command="{Binding Player.NextCommand}"
+                            ToolTip.Tip="下一首">
+                        <Path Data="{x:Static controls:AppIcons.SkipNext}"
+                              Fill="{DynamicResource TextPrimaryBrush}"
+                              Width="20" Height="20" Stretch="Uniform" />
+                    </Button>
+
+                    <Button Classes="icon" Command="{Binding Player.ToggleFavoriteCommand}"
+                            ToolTip.Tip="收藏">
+                        <Path Data="{Binding Player.FavoriteIcon}"
+                              Fill="{DynamicResource TextSecondaryBrush}"
+                              Width="18" Height="18" Stretch="Uniform" />
+                    </Button>
+                </StackPanel>
+
+                <Grid ColumnDefinitions="44,*,44" VerticalAlignment="Center">
+                    <TextBlock Grid.Column="0" Text="{Binding Player.PositionText}"
+                               FontSize="11" VerticalAlignment="Center"
+                               HorizontalAlignment="Right" Margin="0,0,8,0"
+                               Foreground="{DynamicResource TextTertiaryBrush}" />
+                    <Slider Grid.Column="1" Minimum="0"
+                            Maximum="{Binding Player.DurationSeconds}"
+                            Value="{Binding Player.PositionSeconds}" />
+                    <TextBlock Grid.Column="2" Text="{Binding Player.DurationText}"
+                               FontSize="11" VerticalAlignment="Center"
+                               HorizontalAlignment="Left" Margin="8,0,0,0"
+                               Foreground="{DynamicResource TextTertiaryBrush}" />
+                </Grid>
+            </StackPanel>
+
+            <!-- ============ 右：音量（宽屏） ============ -->
+            <StackPanel Grid.Column="2" IsVisible="{Binding IsWide}"
+                        Orientation="Horizontal" Spacing="6"
+                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button Classes="icon" Command="{Binding Player.ToggleMuteCommand}"
+                        ToolTip.Tip="静音">
+                    <Path Data="{Binding Player.VolumeIcon}"
+                          Fill="{DynamicResource TextSecondaryBrush}"
+                          Width="18" Height="18" Stretch="Uniform" />
+                </Button>
+                <Slider Width="110" Minimum="0" Maximum="100"
+                        Value="{Binding Player.Volume}"
+                        VerticalAlignment="Center" />
+            </StackPanel>
+
+            <!-- ============ 右：紧凑布局只有一个播放键 ============ -->
+            <Button Grid.Column="2" Classes="icon primary"
+                    IsVisible="{Binding IsCompact}"
+                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                    Command="{Binding Player.TogglePlayCommand}">
+                <Path Data="{Binding Player.PlayPauseIcon}"
+                      Fill="White" Width="18" Height="18" Stretch="Uniform" />
+            </Button>
+
+        </Grid>
+    </Border>
+</UserControl>

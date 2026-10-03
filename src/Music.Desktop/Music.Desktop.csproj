@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFrameworks>net10.0-windows10.0.19041.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <!-- 应用版本号，在线升级靠它判断新旧；发布新版本时用 scripts/publish-release.ps1 覆盖。 -->
+    <Version>1.0.0</Version>
+    <!-- libvlc native libs are only shipped for x64/x86; keep the app x64. -->
+    <RuntimeIdentifier Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">win-x64</RuntimeIdentifier>
+    <!-- libvlc loads plugins from a directory tree, so single-file/AOT publishing is unsupported. -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishAot>false</PublishAot>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" />
+  </ItemGroup>
+
+  <!-- Native libvlc for Windows -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <PackageReference Include="VideoLAN.LibVLC.Windows" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Music\Music.csproj" />
+  </ItemGroup>
+</Project>

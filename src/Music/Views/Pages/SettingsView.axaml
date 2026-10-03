@@ -1,0 +1,150 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:pages="using:Music.ViewModels.Pages"
+             xmlns:models="using:Music.Models"
+             xmlns:controls="using:Music.Controls"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
+             x:Class="Music.Views.Pages.SettingsView"
+             x:DataType="pages:SettingsViewModel">
+
+    <StackPanel Spacing="16">
+
+        <!-- 外观 -->
+        <Border Classes="card">
+            <StackPanel Spacing="14">
+                <TextBlock Text="外观" Classes="h2" />
+                <Grid ColumnDefinitions="140,*">
+                    <TextBlock Grid.Column="0" Text="主题" Classes="muted"
+                               VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" Width="200" HorizontalAlignment="Left"
+                              ItemsSource="{Binding ThemeOptions}"
+                              SelectedItem="{Binding SelectedTheme}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:ThemeOption">
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 缓存 -->
+        <Border Classes="card">
+            <StackPanel Spacing="14">
+                <TextBlock Text="缓存" Classes="h2" />
+                <Grid ColumnDefinitions="140,*">
+                    <TextBlock Grid.Column="0" Text="缓存上限" Classes="muted"
+                               VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Spacing="4">
+                        <Slider Minimum="0" Maximum="10240"
+                                Value="{Binding CacheLimitMb}"
+                                HorizontalAlignment="Left" Width="320" />
+                        <TextBlock Text="{Binding CacheLimitText}" Classes="muted" FontSize="12" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid ColumnDefinitions="140,*,Auto">
+                    <TextBlock Grid.Column="0" Text="当前占用" Classes="muted"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding CacheUsageText}"
+                               VerticalAlignment="Center" FontSize="13" />
+                    <Button Grid.Column="2" Classes="ghost" Content="清理缓存"
+                            Command="{Binding ClearCacheCommand}" />
+                </Grid>
+
+                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                           Text="播放过的网络曲目会写入缓存，再次播放直接复用，不再重新下载。" />
+            </StackPanel>
+        </Border>
+
+        <!-- 歌词广播 -->
+        <Border Classes="card">
+            <StackPanel Spacing="14">
+                <TextBlock Text="歌词广播" Classes="h2" />
+
+                <Grid ColumnDefinitions="140,*">
+                    <TextBlock Grid.Column="0" Text="开启广播" Classes="muted"
+                               VerticalAlignment="Center" />
+                    <ToggleSwitch Grid.Column="1" OnContent="已开启" OffContent="已关闭"
+                                  IsChecked="{Binding BroadcastEnabled}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="140,*">
+                    <TextBlock Grid.Column="0" Text="端口" Classes="muted"
+                               VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                   Minimum="1" Maximum="65535"
+                                   Value="{Binding BroadcastPort}" />
+                </Grid>
+
+                <TextBlock Text="{Binding BroadcastStatusText}" Classes="muted" FontSize="12"
+                           TextWrapping="Wrap" />
+                <TextBlock Text="{Binding BroadcastUrlText}" FontSize="12"
+                           FontFamily="Consolas,monospace"
+                           Foreground="{DynamicResource AccentBrush}"
+                           TextWrapping="Wrap" />
+
+                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                           Text="说明：蓝牙耳机/车机通过 AVRCP 只能拿到歌名、艺术家与封面，协议本身不承载歌词。逐行歌词通过上面的局域网地址广播给手机或外接小屏。" />
+            </StackPanel>
+        </Border>
+
+        <!-- 在线升级 -->
+        <Border Classes="card">
+            <StackPanel Spacing="14">
+                <TextBlock Text="在线升级" Classes="h2" />
+
+                <Grid ColumnDefinitions="140,*">
+                    <TextBlock Grid.Column="0" Text="当前版本" Classes="muted"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding VersionText}"
+                               VerticalAlignment="Center" FontSize="13" />
+                </Grid>
+
+                <Grid ColumnDefinitions="140,*">
+                    <TextBlock Grid.Column="0" Text="更新地址" Classes="muted"
+                               VerticalAlignment="Center" />
+                    <TextBox Grid.Column="1"
+                             PlaceholderText="https://example.com/music/latest.json"
+                             Text="{Binding UpdateFeedUrl}" />
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Classes="accent" Content="检查更新"
+                            IsEnabled="{Binding !IsCheckingUpdate}"
+                            Command="{Binding CheckUpdateCommand}" />
+                    <Button Classes="ghost" Content="下载并安装"
+                            IsVisible="{Binding HasPendingUpdate}"
+                            IsEnabled="{Binding !IsCheckingUpdate}"
+                            Command="{Binding InstallUpdateCommand}" />
+                </StackPanel>
+
+                <TextBlock Text="{Binding UpdateStatusText}" Classes="muted" FontSize="12"
+                           TextWrapping="Wrap" />
+
+                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                           IsVisible="{Binding CanSelfUpdate}"
+                           Text="更新地址需返回 JSON：{ &quot;version&quot;: &quot;1.1.0&quot;, &quot;url&quot;: &quot;Music-1.1.0.zip&quot;, &quot;sha256&quot;: &quot;可选校验值&quot;, &quot;notes&quot;: &quot;更新说明&quot; }。url 可写完整地址，也可写相对清单所在目录的文件名。安装包解压后覆盖当前安装目录并自动重启。" />
+
+                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                           IsVisible="{Binding !CanSelfUpdate}"
+                           Text="当前平台不支持自我覆盖安装，请通过应用商店升级。" />
+            </StackPanel>
+        </Border>
+
+        <!-- 关于 -->
+        <Border Classes="card">
+            <StackPanel Spacing="10">
+                <TextBlock Text="关于" Classes="h2" />
+                <Grid ColumnDefinitions="140,*">
+                    <TextBlock Grid.Column="0" Text="版本" Classes="muted" />
+                    <TextBlock Grid.Column="1" Text="{Binding VersionText}" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>
