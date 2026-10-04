@@ -1,8 +1,8 @@
 {
-    "version":  "1.1.9",
-    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.9/Music-1.1.9.zip",
-    "sha256":  "dd7eadbaa690bd041afda6efefa7db7b58e1201a74ebc614cd9f7a0c4ee0dc24",
-    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.9/Music-1.1.9.apk",
-    "androidSha256":  "c23fdb2b93d865885cad31df37a1b95311ca6e180a2688e83dbaadf603969d81",
-    "notes":  "优化安卓端webdav无法同步问题"
+    "version":  "1.2.0",
+    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.0/Music-1.2.0.zip",
+    "sha256":  "e38335b5c3720fa6f98bff8cd57f5975a4dc2ac5c7f24ee09f6d56ec22ad40b0",
+    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.0/Music-1.2.0.apk",
+    "androidSha256":  "c875ad5dd7fa9c89db7cc1c8def81eef8f6a6abb897f423876a1888a27a920b4",
+    "notes":  "1、支持删除音乐 \n2、解决发现的音乐收藏或添加到歌单后找不到"
 }
