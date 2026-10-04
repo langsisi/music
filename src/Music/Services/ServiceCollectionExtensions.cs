@@ -9,6 +9,7 @@ using Music.Services.Lyrics;
 using Music.Services.Media;
 using Music.Services.Metadata;
 using Music.Services.Metadata.Providers;
+using Music.Services.Online;
 using Music.Services.Security;
 using Music.Services.Sources;
 using Music.Services.SystemMedia;
@@ -68,6 +69,11 @@ public static class ServiceCollectionExtensions
         // 默认不支持自更新；平台 head 会覆盖成 Windows / Android 安装器。
         services.AddSingleton<IUpdateInstaller, UnsupportedUpdateInstaller>();
         services.AddSingleton<UpdateService>();
+
+        // 在线发现（GD 音乐台）：搜索 / 推荐 + 下载到指定音源
+        services.AddSingleton<GdMusicClient>();
+        services.AddSingleton<OnlineMusicService>();
+        services.AddSingleton<OnlineDownloadService>();
 
         // 页面
         services.AddSingleton<HomeViewModel>();

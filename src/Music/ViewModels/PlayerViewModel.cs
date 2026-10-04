@@ -301,8 +301,8 @@ public partial class PlayerViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isDownloading;
 
-    /// <summary>本地曲目无需下载，仅网络音源（FTP / Navidrome）可用。</summary>
-    public bool CanDownload => CurrentTrack is { SourceType: not MusicSourceType.Local };
+    /// <summary>本地曲目无需下载，仅网络音源（FTP / Navidrome）可用。在线曲目由「发现」页下载。</summary>
+    public bool CanDownload => CurrentTrack is { SourceType: not (MusicSourceType.Local or MusicSourceType.Online) };
 
     /// <summary>歌单（分类）列表及其归属状态。</summary>
     public ObservableCollection<PlaylistOptionViewModel> Playlists { get; } = [];

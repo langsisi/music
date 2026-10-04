@@ -31,4 +31,11 @@ public interface IFtpFileClient : IAsyncDisposable
         Stream destination,
         IProgress<double>? progress,
         CancellationToken cancellationToken);
+
+    /// <summary>把 <paramref name="content"/> 上传到远端路径；目录不存在时自动创建。</summary>
+    Task UploadAsync(
+        string remotePath,
+        Stream content,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken);
 }

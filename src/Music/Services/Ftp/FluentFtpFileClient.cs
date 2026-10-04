@@ -76,5 +76,29 @@ public sealed class FluentFtpFileClient : IFtpFileClient
             .ConfigureAwait(false);
     }
 
+    public async Task UploadAsync(
+        string remotePath,
+        Stream content,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
+    {
+        await ConnectAsync(cancellationToken).ConfigureAwait(false);
+
+        // FtpProgress.Progress 是 0..100 的百分比。
+        IProgress<FtpProgress>? ftpProgress = progress is null
+            ? null
+            : new Progress<FtpProgress>(report => progress.Report(report.Progress / 100));
+
+        await _client
+            .UploadStream(
+                content,
+                remotePath,
+                FtpRemoteExists.Overwrite,
+                createRemoteDir: true,
+                ftpProgress,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async ValueTask DisposeAsync() => await _client.DisposeAsync().ConfigureAwait(false);
 }

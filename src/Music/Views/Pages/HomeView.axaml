@@ -11,7 +11,109 @@
              x:DataType="pages:HomeViewModel"
              x:CompileBindings="True">
 
+    <UserControl.Resources>
+        <!-- 横向卡片容器：推荐与最近播放统一用它，避免窗口变窄时退化成竖向排列 -->
+        <ItemsPanelTemplate x:Key="HorizontalCardsPanel">
+            <StackPanel Orientation="Horizontal" Spacing="14" />
+        </ItemsPanelTemplate>
+
+        <!-- 在线推荐卡片（每日 / 随机推荐共用）：点封面即播放 -->
+        <DataTemplate x:Key="OnlineCard" x:DataType="vm:OnlineTrackViewModel">
+            <Button Classes="bare" Padding="0" Command="{Binding PlayCommand}">
+                <StackPanel Width="108" Spacing="7">
+                    <Border Width="108" Height="108" CornerRadius="12"
+                            ClipToBounds="True"
+                            Background="{DynamicResource AccentSoftBrush}">
+                        <Grid>
+                            <Path Data="{x:Static controls:AppIcons.MusicNote}"
+                                  Fill="{DynamicResource TextTertiaryBrush}"
+                                  Width="34" Height="34" Stretch="Uniform"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Stretch="UniformToFill" Source="{Binding Cover}" />
+                        </Grid>
+                    </Border>
+                    <TextBlock Text="{Binding DisplayTitle}" FontSize="13"
+                               FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="11.5"
+                               Classes="muted" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <StackPanel Spacing="24">
+
+        <!-- ==================== 每日推荐 ==================== -->
+        <StackPanel Spacing="12">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="每日推荐" Classes="h2"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="icon" Width="34" Height="34"
+                        ToolTip.Tip="刷新每日推荐"
+                        IsEnabled="{Binding !IsDailyLoading}"
+                        Command="{Binding RefreshDailyCommand}">
+                    <Path Data="{x:Static controls:AppIcons.Refresh}"
+                          Fill="{DynamicResource TextTertiaryBrush}"
+                          Width="16" Height="16" Stretch="Uniform" />
+                </Button>
+            </Grid>
+
+            <ScrollViewer IsVisible="{Binding HasDailyRecommendations}"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding DailyRecommendations}"
+                              ItemsPanel="{StaticResource HorizontalCardsPanel}"
+                              ItemTemplate="{StaticResource OnlineCard}" />
+            </ScrollViewer>
+
+            <!-- 与「最近播放」一致的空状态卡片：加载中 / 无结果都走这里 -->
+            <Border Classes="card" Padding="24" IsVisible="{Binding !HasDailyRecommendations}">
+                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                    <Path Data="{x:Static controls:AppIcons.MusicNote}"
+                          Fill="{DynamicResource TextTertiaryBrush}"
+                          Width="28" Height="28" Stretch="Uniform"
+                          HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding DailyHint}" HorizontalAlignment="Center"
+                               Classes="muted" FontSize="13" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- ==================== 随机推荐 ==================== -->
+        <StackPanel Spacing="12">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="随机推荐" Classes="h2"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="icon" Width="34" Height="34"
+                        ToolTip.Tip="换一批"
+                        IsEnabled="{Binding !IsRandomLoading}"
+                        Command="{Binding RefreshRandomCommand}">
+                    <Path Data="{x:Static controls:AppIcons.Refresh}"
+                          Fill="{DynamicResource TextTertiaryBrush}"
+                          Width="16" Height="16" Stretch="Uniform" />
+                </Button>
+            </Grid>
+
+            <ScrollViewer IsVisible="{Binding HasRandomRecommendations}"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding RandomRecommendations}"
+                              ItemsPanel="{StaticResource HorizontalCardsPanel}"
+                              ItemTemplate="{StaticResource OnlineCard}" />
+            </ScrollViewer>
+
+            <!-- 与「最近播放」一致的空状态卡片：加载中 / 无结果都走这里 -->
+            <Border Classes="card" Padding="24" IsVisible="{Binding !HasRandomRecommendations}">
+                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                    <Path Data="{x:Static controls:AppIcons.MusicNote}"
+                          Fill="{DynamicResource TextTertiaryBrush}"
+                          Width="28" Height="28" Stretch="Uniform"
+                          HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding RandomHint}" HorizontalAlignment="Center"
+                               Classes="muted" FontSize="13" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
 
         <!-- ==================== 最近播放 ==================== -->
         <StackPanel Spacing="12">

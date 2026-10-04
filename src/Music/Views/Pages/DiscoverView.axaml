@@ -3,27 +3,231 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:pages="using:Music.ViewModels.Pages"
+             xmlns:vm="using:Music.ViewModels"
+             xmlns:models="using:Music.Models"
+             xmlns:online="using:Music.Services.Online"
              xmlns:controls="using:Music.Controls"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
              x:Class="Music.Views.Pages.DiscoverView"
              x:DataType="pages:DiscoverViewModel"
              x:CompileBindings="True">
 
-    <StackPanel HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Spacing="14"
-                Margin="0,80,0,0">
-        <Border Width="96" Height="96" CornerRadius="48"
-                Background="{DynamicResource AccentSoftBrush}">
-            <Path Data="{x:Static controls:AppIcons.Explore}"
-                  Fill="{DynamicResource AccentBrush}"
-                  Width="44" Height="44" Stretch="Uniform"
-                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+    <UserControl.Styles>
+        <!-- 说明文字：宽屏居中，窄屏左对齐（避免折行后出现悬挂缩进） -->
+        <Style Selector="TextBlock.gdnote">
+            <Setter Property="TextAlignment" Value="Center" />
+        </Style>
+        <Style Selector="StackPanel.narrow TextBlock.gdnote">
+            <Setter Property="TextAlignment" Value="Left" />
+        </Style>
+
+        <!-- 搜索行：宽屏「输入框 + 按钮」同一行，窄屏按钮换到下一行并撑满 -->
+        <Style Selector="Button.searchbtn">
+            <!-- 放在样式里而不是就地设置，窄屏样式才能覆盖 Grid.Column -->
+            <Setter Property="Grid.Row" Value="0" />
+            <Setter Property="Grid.Column" Value="1" />
+            <Setter Property="MinWidth" Value="96" />
+            <Setter Property="Height" Value="46" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="Margin" Value="10,0,0,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="StackPanel.narrow Border.searchhost">
+            <Setter Property="Grid.ColumnSpan" Value="2" />
+        </Style>
+        <Style Selector="StackPanel.narrow Button.searchbtn">
+            <Setter Property="Grid.Row" Value="1" />
+            <Setter Property="Grid.Column" Value="0" />
+            <Setter Property="Grid.ColumnSpan" Value="2" />
+            <Setter Property="Margin" Value="0,10,0,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+
+        <!-- 音源 / 音质 / 下载到：宽屏一行三格，窄屏一列三行且下拉撑满 -->
+        <Style Selector="TextBlock.optlabel">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        </Style>
+        <Style Selector="Grid.optrow">
+            <Setter Property="Margin" Value="0,0,18,0" />
+        </Style>
+        <Style Selector="StackPanel.narrow Grid.optrow">
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+
+        <!-- 窄屏隐藏行内的下载状态，给歌名留出宽度（进度看顶部状态栏） -->
+        <Style Selector="StackPanel.narrow Border.rowstate">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <!-- 搜索结果的一行：封面 + 标题/歌手 + 下载状态 + 下载 + 播放 -->
+        <DataTemplate x:Key="OnlineTrackRow" x:DataType="vm:OnlineTrackViewModel">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Height="56" Margin="2,1">
+
+                <Border Grid.Column="0" Width="42" Height="42" CornerRadius="8"
+                        ClipToBounds="True"
+                        Background="{DynamicResource AccentSoftBrush}">
+                    <Image Stretch="UniformToFill" Source="{Binding Cover}" />
+                </Border>
+
+                <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="{Binding DisplayTitle}" FontSize="13.5"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                </StackPanel>
+
+                <Border Grid.Column="2" Classes="rowstate" Margin="6,0"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="{Binding DownloadText}" FontSize="11"
+                               IsVisible="{Binding HasDownloadText}"
+                               Foreground="{DynamicResource TextTertiaryBrush}" />
+                </Border>
+
+                <Button Grid.Column="3" Classes="icon" VerticalAlignment="Center"
+                        ToolTip.Tip="下载到所选音源"
+                        IsEnabled="{Binding !IsDownloading}"
+                        Command="{Binding DownloadCommand}">
+                    <Path Data="{x:Static controls:AppIcons.Download}"
+                          Fill="{DynamicResource TextSecondaryBrush}"
+                          Width="18" Height="18" Stretch="Uniform" />
+                </Button>
+
+                <Button Grid.Column="4" Classes="icon" VerticalAlignment="Center"
+                        ToolTip.Tip="播放"
+                        Command="{Binding PlayCommand}">
+                    <Path Classes="playglyph" Data="{x:Static controls:AppIcons.Play}"
+                          Fill="{DynamicResource TextSecondaryBrush}"
+                          Width="18" Height="18" Stretch="Uniform" />
+                </Button>
+
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <StackPanel x:Name="RootPanel" Spacing="18">
+
+        <!-- 说明放在搜索行上方 -->
+        <TextBlock Classes="gdnote"
+                   Text="免费 API 来自 GD 音乐台（music.gdstudio.xyz），仅供学习交流使用，请支持正版音乐。"
+                   FontSize="11.5" TextWrapping="Wrap"
+                   Foreground="{DynamicResource TextTertiaryBrush}" />
+
+        <!-- ==================== 搜索 ==================== -->
+        <Border Classes="card">
+            <StackPanel Spacing="12">
+
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                    <Border Grid.Row="0" Grid.Column="0" Classes="searchbox searchhost">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Path Grid.Column="0" Data="{x:Static controls:AppIcons.Search}"
+                                  Fill="{DynamicResource TextTertiaryBrush}"
+                                  Width="20" Height="20" Stretch="Uniform"
+                                  VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1"
+                                     PlaceholderText="搜索歌曲 / 歌手 / 专辑"
+                                     Text="{Binding SearchText}" />
+                        </Grid>
+                    </Border>
+                    <Button Classes="accent searchbtn"
+                            Command="{Binding SearchCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    VerticalAlignment="Center">
+                            <Path Data="{x:Static controls:AppIcons.Search}"
+                                  Fill="{DynamicResource TextOnAccentBrush}"
+                                  Width="16" Height="16" Stretch="Uniform"
+                                  VerticalAlignment="Center" />
+                            <TextBlock Text="搜索" FontSize="14" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <!-- 音源 / 音质 / 下载目标：列数由 code-behind 按宽度直接设置（Columns 不吃样式设置器） -->
+                <UniformGrid x:Name="OptionsGrid" Columns="3">
+
+                    <Grid ColumnDefinitions="Auto,*" Classes="optrow">
+                        <TextBlock Grid.Column="0" Classes="optlabel" Text="音源" />
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding Sources}"
+                                  SelectedItem="{Binding SelectedSource}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:OnlineSourceOption">
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="Auto,*" Classes="optrow">
+                        <TextBlock Grid.Column="0" Classes="optlabel" Text="音质" />
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding Bitrates}"
+                                  SelectedItem="{Binding SelectedBitrate}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:BitrateOption">
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="Auto,*,Auto" Classes="optrow">
+                        <TextBlock Grid.Column="0" Classes="optlabel" Text="下载到" />
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding DownloadTargets}"
+                                  SelectedItem="{Binding SelectedDownloadTarget}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="online:OnlineDownloadTarget">
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Grid.Column="2" Classes="icon" Width="34" Height="34"
+                                Margin="6,0,0,0"
+                                ToolTip.Tip="刷新下载目标"
+                                Command="{Binding RefreshTargetsCommand}">
+                            <Path Data="{x:Static controls:AppIcons.Refresh}"
+                                  Fill="{DynamicResource TextTertiaryBrush}"
+                                  Width="16" Height="16" Stretch="Uniform" />
+                        </Button>
+                    </Grid>
+
+                </UniformGrid>
+
+                <TextBlock Text="{Binding StatusText}" FontSize="12" TextWrapping="Wrap"
+                           IsVisible="{Binding HasStatusText}"
+                           Foreground="{DynamicResource TextSecondaryBrush}" />
+
+            </StackPanel>
         </Border>
-        <TextBlock Text="发现功能即将到来" FontSize="18" FontWeight="SemiBold"
-                   HorizontalAlignment="Center" />
-        <TextBlock Text="每日推荐、最近添加、随机推荐等内容，以后会在这里与你见面"
-                   FontSize="13" TextAlignment="Center" TextWrapping="Wrap"
-                   Classes="muted" HorizontalAlignment="Center" MaxWidth="280" />
+
+        <!-- ==================== 搜索结果 ==================== -->
+        <StackPanel Spacing="8" IsVisible="{Binding HasSearchResults}">
+            <TextBlock Text="搜索结果" Classes="section" Margin="2,0,0,0" />
+            <Border Classes="card" Padding="8">
+                <ItemsControl ItemsSource="{Binding SearchResults}"
+                              ItemTemplate="{StaticResource OnlineTrackRow}" />
+            </Border>
+        </StackPanel>
+
+        <Border Classes="card" Padding="24" IsVisible="{Binding ShowEmptyResultHint}">
+            <StackPanel Spacing="6" HorizontalAlignment="Center">
+                <Path Data="{x:Static controls:AppIcons.Search}"
+                      Fill="{DynamicResource TextTertiaryBrush}" Stretch="Uniform"
+                      Width="26" Height="26" HorizontalAlignment="Center" />
+                <TextBlock Text="没有找到相关歌曲" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                <TextBlock Text="试试更换关键词或切换音源" HorizontalAlignment="Center"
+                           FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
+            </StackPanel>
+        </Border>
+
     </StackPanel>
 </UserControl>

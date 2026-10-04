@@ -58,7 +58,15 @@ public partial class MainViewModel : ViewModelBase
     private NavigationItem? _selectedNavItem;
 
     partial void OnSelectedNavItemChanged(NavigationItem? value)
-        => OnPropertyChanged(nameof(CurrentPage));
+    {
+        // 发现页首次进入时刷新可用的下载目标（设置里增删音源后回来即为最新）。
+        if (value?.Page is Pages.DiscoverViewModel discover)
+        {
+            discover.Activate();
+        }
+
+        OnPropertyChanged(nameof(CurrentPage));
+    }
 
     /// <summary>当前页面，交给 ViewLocator 解析出对应 View。</summary>
     public Pages.PageViewModel? CurrentPage => SelectedNavItem?.Page;
