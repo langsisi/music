@@ -1,6 +1,6 @@
 # Music
 
-用 **Avalonia 12** 写的跨平台音乐播放器。桌面端为主，同一套界面通过断点自动适配手机；音源支持**本地文件夹 / FTP / Navidrome（Subsonic）**。
+用 **Avalonia 12** 写的跨平台音乐播放器，包含 **Windows（桌面）/ Android / iOS** 三个 head 工程，共用同一套界面与核心；桌面端为主，窄屏通过断点自动适配手机。音源支持**本地文件夹 / FTP / Navidrome（Subsonic）**。
 
 ## 功能
 
@@ -16,10 +16,11 @@
 
 | 用途 | 包 | 版本 |
 |---|---|---|
-| UI 框架 | Avalonia / Avalonia.Desktop / Avalonia.Themes.Fluent / Avalonia.Fonts.Inter | 12.1.3 |
+| UI 框架 | Avalonia / Avalonia.Desktop / Avalonia.iOS / Avalonia.Themes.Fluent / Avalonia.Fonts.Inter | 12.1.3 |
 | MVVM | CommunityToolkit.Mvvm | 8.4.2 |
 | 音频引擎（托管层） | LibVLCSharp | 3.10.1 |
 | 原生 libvlc（Windows / Android） | VideoLAN.LibVLC.Windows / VideoLAN.LibVLC.Android | 3.0.24 / 3.6.5 |
+| 音频引擎（iOS） | 系统 AVFoundation（`AVPlayer`） | 随系统 |
 | 本地元数据 | TagLibSharp | 2.3.0 |
 | FTP | FluentFTP | 55.0.0 |
 | 本地索引（收藏 / 分类 / 缓存） | Microsoft.Data.Sqlite | 10.0.12 |
@@ -28,6 +29,8 @@
 版本集中在 `Directory.Packages.props` 里管理（Central Package Management）。
 
 > libvlc 与 LibVLCSharp 的主版本必须匹配（libvlc 3.x 配 LibVLCSharp 3.x），混用会抛 `VLCException`。
+>
+> **iOS 不使用 libvlc**：该系统上没有可用的 libvlc 实现，改由系统 AVFoundation / `AVPlayer` 提供音频后端，因此 iOS 包不含任何 libvlc 原生库。
 
 ## 项目结构
 
@@ -36,6 +39,7 @@ Music.slnx
 ├─ src/Music/            (net10.0)                            共享核心：模型 / 服务 / VM / View / 样式
 ├─ src/Music.Desktop/    (net10.0-windows…;net10.0, win-x64)   桌面头
 ├─ src/Music.Android/    (net10.0-android)                     Android 头
+├─ src/Music.iOS/        (net10.0-ios)                         iOS 头（不在 Music.slnx 内）
 └─ scripts/              发布脚本
 ```
 
@@ -126,106 +130,143 @@ covers/          从标签或服务器导出的封面
 
 ### 在线升级
 
-「设置 → 在线升级」填入版本清单地址即可。工作流程：
+更新地址与鉴权令牌**内置在应用里**——编译期把 `src/Music/update.config.json` 作为嵌入资源打进程序集（见 [UpdateDefaults.cs](src/Music/Services/Update/UpdateDefaults.cs)），终端用户**无需在设置里填任何地址**。设置页只提供「检查更新」，以及（在支持自更新的平台上）「下载并安装」。
 
-1. GET 清单 JSON，比较版本号（当前版本取自程序集的 `Version`）；
-2. 有新版则下载 zip，若清单给了 `sha256` 就校验，不匹配直接丢弃；
-3. 启动一个独立进程等待本应用退出 → 用 `Expand-Archive` 覆盖安装目录 → 重新启动。
+工作流程：
 
-清单格式（键名大小写不敏感，带不带 BOM 都能解析）：
+1. GET 内置地址返回的清单 JSON，比较版本号（当前版本取自程序集的 `Version`）；
+2. 有新版则下载包，若清单给了 `sha256` 就校验，不匹配直接丢弃；
+3. 交给平台安装器（`IUpdateInstaller`）落地：
+   - **Windows**：启动独立进程等待应用退出 → 用 `Expand-Archive` 覆盖安装目录 → 重新启动；
+   - **Android**：下载 `.apk` 后经 `FileProvider` 交给系统安装器，由用户确认安装；
+   - **iOS**：沙盒禁止自更新，`CanSelfUpdate` 为 `false`，按钮自动隐藏（见 [iOS 章节](#ios)）。
+
+内置配置 `src/Music/update.config.json`：
+
+```json
+{
+  "feedUrl": "https://<gitea-host>/<owner>/<repo>/raw/branch/master/latest.json",
+  "user": "",
+  "token": "<私有仓库只读令牌；清单公开时留空>"
+}
+```
+
+- `user` 与 `token` 都填 → HTTP Basic 鉴权；只填 `token` → Gitea 的 `token` 方案；都留空 → 匿名访问。
+- 该文件是**嵌入资源**（`LogicalName=Music.update.config.json`），改了必须**重新构建**才会生效。
+- ⚠️ 令牌虽为只读用途，仍是敏感信息，**不要把它提交到公开仓库**。
+
+清单格式（键名大小写不敏感，带不带 BOM 都能解析）——`url`/`sha256` 是通用包（桌面 zip），`androidUrl`/`androidSha256` 供 Android 优先使用：
 
 ```json
 {
   "version": "1.1.0",
-  "url": "Music-1.1.0.zip",
+  "url": "https://.../v1.1.0/Music-1.1.0.zip",
   "sha256": "20d234efe3b36211a549a6b15770e7d47df75e4faecedb640a53abb611582fce",
+  "androidUrl": "https://.../v1.1.0/Music-1.1.0.apk",
+  "androidSha256": "9f1c8a...",
   "notes": "新增歌词广播"
 }
 ```
 
-`url` 既可以写完整地址，也可以写**相对清单所在目录**的文件名（上例即与清单同目录），后者方便把清单和安装包放在同一个静态目录。
+`url` 既可以写完整地址，也可以写**相对清单所在目录**的文件名（例如 `Music-1.1.0.zip`），后者方便把清单和安装包放在同一个静态目录。
 
 ## 发布新版本
+
+发布脚本 [scripts/publish-release.ps1](scripts/publish-release.ps1) 一键完成：构建桌面包 → （默认）构建安卓 apk → 生成 `latest.json` → 用 **Gitea API** 建 Release、上传附件、把清单提交到仓库分支。
+
+### 前置条件
+
+需要一个具有 **repository 读写权限**的 Gitea 访问令牌（只读令牌会因 `403` 失败），用参数或环境变量传入，令牌不会写进仓库或脚本：
+
+```powershell
+$env:MUSIC_GITEA_TOKEN = '<你的令牌>'    # 也可用 -Token 传入
+```
+
+脚本内置的默认值（均可在命令行覆盖）：
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `-GiteaBaseUrl` | `https://www.294713.xyz` | Gitea 站点根地址 |
+| `-Repo` | `zhusenlin/Music` | `owner/repo` |
+| `-Branch` | `master` | 提交 `latest.json` 所依据的分支 |
+| `-Tag` | `v<版本>` | Release 的 Tag |
+| `-Runtime` | `win-x64` | 桌面包架构 |
+| `-AndroidConfiguration` | `Debug` | 安卓构建配置 |
 
 ### 一键发布
 
 ```powershell
-# 默认：包上传到 GitCode Release，清单里的 url 自动指向 <ReleaseBaseUrl>/v<版本>/Music-<版本>.zip
-.\scripts\publish-release.ps1 -Version 1.1.0 -Notes "新增歌词广播"
+# 默认：自包含桌面包 + Debug 安卓 apk，上传 Gitea Release 并提交 latest.json
+.\scripts\publish-release.ps1 -Version 1.1.1 -Notes "修复若干问题"
 
-# 自包含包（体积更大，免装运行时）
-.\scripts\publish-release.ps1 -Version 1.1.0 -SelfContained -Notes "修复若干问题"
+# 只出包与本地 latest.json，不碰服务器
+.\scripts\publish-release.ps1 -Version 1.1.1 -SkipUpload
 
-# Tag 与包版本不一致时显式指定（默认 Tag = v<版本>）
-.\scripts\publish-release.ps1 -Version 1.1.0 -Tag v1.0.0
+# 只发桌面，跳过安卓
+.\scripts\publish-release.ps1 -Version 1.1.1 -SkipAndroid
 
-# 清单与安装包放在同一个静态目录时，改成写相对文件名
-.\scripts\publish-release.ps1 -Version 1.1.0 -ReleaseBaseUrl '' -Notes "说明"
+# 精简包（体积小，但目标机需预装 .NET 10 桌面运行时）
+.\scripts\publish-release.ps1 -Version 1.1.1 -FrameworkDependent
 
-# 换到别的托管平台
-.\scripts\publish-release.ps1 -Version 1.1.0 `
-    -ReleaseBaseUrl https://gitee.com/your-name/music/releases/download -Notes "说明"
+# 保留 pdb 符号文件（默认剔除）
+.\scripts\publish-release.ps1 -Version 1.1.1 -KeepSymbols
 ```
 
-脚本会做这些事：`dotnet publish`（用 `-p:Version` 注入版本号）→ 剔除 libvlc 里非当前架构的目录 → 剔除 pdb 符号文件（省约 100MB）→ 校验 zip 根目录有 `Music.Desktop.exe` → 打包 → 计算 SHA256 → **把 `latest.json` 写到仓库根目录**。
+> 默认发布**自包含**桌面包（目标机无需预装 .NET 10 桌面运行时）。AOT 与单文件**必须关闭**，因为 libvlc 依赖 `plugins/` 目录按路径加载。
+
+脚本流程：
+
+1. `dotnet publish` 桌面（`-p:Version` 注入版本号）→ 剔除 libvlc 里非当前架构的目录 → 剔除 pdb（默认省约 100MB）→ 校验 zip 根目录有 `Music.Desktop.exe` → 打包 → 计算 SHA256；
+2. （默认）构建安卓 apk：`versionCode` 由版本号推导，取 `*-Signed.apk`；Debug 用系统调试密钥即可直接安装，Release 需自行配置签名；
+3. 生成 `latest.json`（`url` 指向 Gitea Release 附件；含安卓包时附 `androidUrl`/`androidSha256`）并**写到仓库根目录**；
+4. 用 Gitea API 建/复用目标 Tag 的 Release → 删除同名旧附件后上传 zip / apk → 通过 contents API 把 `latest.json` 提交到 `-Branch`。
 
 产物：
 
 ```
-artifacts\Music-<版本>.zip   约 67MB，上传到 Release 附件（artifacts/ 已被 .gitignore 忽略）
-latest.json                  仓库根目录，提交推送后即可被应用读取
+artifacts\Music-<版本>.zip   桌面包，上传到 Release 附件（artifacts/ 已被 .gitignore 忽略）
+artifacts\Music-<版本>.apk   安卓包（未加 -SkipAndroid 时）
+latest.json                  仓库根目录，脚本已自动提交到分支
 ```
 
-以 `-Version 1.1.0` 为例，生成的清单是：
+以 `-Version 1.1.0`（含安卓）为例，生成的清单形如：
 
 ```json
 {
   "version": "1.1.0",
-  "url": "https://gitcode.com/evoq58/music/releases/download/v1.1.0/Music-1.1.0.zip",
+  "url": "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.0/Music-1.1.0.zip",
   "sha256": "6de8d237b10db9a7da98bef39b354da85453d84fee269ae9bcc8da0259d573f7",
+  "androidUrl": "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.0/Music-1.1.0.apk",
+  "androidSha256": "9f1c8a...",
   "notes": "新增歌词广播"
 }
 ```
 
-> **sha256 必须对应你实际上传的那个包**。zip 里含文件时间戳，**重新跑一次脚本产出的包哈希就会变**，所以：改了代码重新发布时，要用本次产出的 zip 覆盖 Release 上的同名文件，否则应用会因「校验失败」丢弃更新。想复核远端包的哈希，可以下载后自己算：
->
-> ```powershell
-> Invoke-WebRequest 'https://gitcode.com/<owner>/<repo>/releases/download/<tag>/Music-<版本>.zip' -OutFile "$env:TEMP\uploaded.zip"
-> (Get-FileHash "$env:TEMP\uploaded.zip" -Algorithm SHA256).Hash.ToLower()
-> ```
-
-手动发布等价于：
-
-```powershell
-dotnet publish src\Music.Desktop -c Release -f net10.0-windows10.0.19041.0 `
-    -r win-x64 --self-contained false -p:Version=1.1.0 -o publish
-```
+> **sha256 必须对应你实际上传的那个包**。zip 里含文件时间戳，**重新跑一次脚本产出的包哈希就会变**；脚本在上传前会删除同名旧附件再重传，因此清单哈希与附件始终一致（这一步无需手动干预）。
 
 > **最容易踩的坑**：发布时必须让版本号进到程序集（脚本已用 `-p:Version` 处理好）。否则应用始终认为自己是 `1.0.0`，永远检测不到更新。
 
-### 用 GitCode 做升级托管（本项目当前用法）
+上传成功后**无需手动建 Release 或推送 `latest.json`**；只有加了 `-SkipUpload` 时才需要自己把 `artifacts` 里的包与 `latest.json` 放上去。
 
-1. 跑脚本：`.\scripts\publish-release.ps1 -Version 1.1.0 -Notes "新增歌词广播"`
-2. 在 GitCode 用 Tag `v1.1.0` 新建 Release，上传 `artifacts\Music-1.1.0.zip`
-3. 提交并推送仓库根目录的 `latest.json`
-4. 应用「设置 → 在线升级 → 更新地址」填：`https://raw.gitcode.com/evoq58/music/raw/master/latest.json`
-5. **刚上传完要等一会儿**：GitCode 的 raw 与 Release 附件走 CDN，刚推送/刚上传时可能返回 403 / 404 或旧内容（实测踩过：清单已能推上去，但立刻检查更新会报 `403 (Forbidden)`，等几分钟就正常）。发布新版本后若客户端仍显示「已是最新版本」，多半也是缓存还没刷新。
+### 清单直链与缓存
 
-注意 GitCode 的 raw 直链要走**独立域名 `raw.gitcode.com`**（`gitcode.com/<owner>/<repo>/raw/...` 对非浏览器客户端会返回网页外壳而不是文件内容），格式为：
+应用读取的清单直链格式：
 
 ```
-https://raw.gitcode.com/{owner}/{repo}/raw/{branch}/{path}
+https://<gitea-host>/<owner>/<repo>/raw/branch/<branch>/latest.json
 ```
 
-### 上传到 Gitee / GitCode 等静态服务器
+> **刚上传完要等一会儿**：Gitea 的 raw 与 Release 附件可能走 CDN / 缓存，刚推送或刚上传时可能返回旧内容。发布新版本后若客户端仍显示「已是最新版本」，多半是缓存还没刷新。
 
-客户端只做「GET 一个 JSON + GET 一个 zip」，不需要 API、鉴权或服务端逻辑，所以任何能直链下载的地方都行（GitHub / Gitee / GitCode / 对象存储 / Cloudflare Pages…）。Gitee 与 GitCode 仓库里文件的 **Raw 直链**即可，不需要 Gitee Pages。
+### 上传到 Gitee / GitCode 等其它静态服务器
+
+客户端只做「GET 一个 JSON + GET 一个 zip」，不需要 API、鉴权或服务端逻辑，所以任何能直链下载的地方都行（GitHub / Gitee / GitCode / 对象存储 / Cloudflare Pages…）。此时用 `-SkipUpload` 出包，再把 zip 与 `latest.json` 一起放到静态目录（`url` 写成相对文件名最省事），并把 `update.config.json` 的 `feedUrl` 指向该清单。
 
 注意事项：
 
-1. **单文件上限 100MB**：Gitee 免费仓库单文件上限 100MB，本项目的包约 67MB（已剔除 pdb 与多余架构）。再加平台会超限，建议 zip 放**发行版附件**或对象存储。
-2. **先验证直链**：用无痕浏览器确认能直接下载（有些平台会跳转或限制未登录下载），再填进应用。清单要能返回 JSON 而不是 HTML。
-3. **zip 必须把文件放在根目录**，不能多套一层——升级脚本是「解压到安装目录」，多一层就覆盖不到。脚本已自动校验。
+1. **单文件上限 100MB**：Gitee 免费仓库单文件上限 100MB，本项目自包含包可能接近上限（已剔除 pdb 与多余架构）。超限时改用**发行版附件**、对象存储，或加 `-FrameworkDependent` 出精简包。
+2. **先验证直链**：用无痕浏览器确认能直接下载（有些平台会跳转或限制未登录下载），再填进 `update.config.json`。清单要能返回 JSON 而不是 HTML。
+3. **zip 必须把文件放在根目录**，不能多套一层——升级是「解压到安装目录」，多一层就覆盖不到。脚本已自动校验。
 4. **覆盖只覆盖同名文件，不删除旧文件**：新版删掉的 dll 会残留在安装目录（对 .NET 应用一般无害）。
 5. **安装目录必须可写**：若装在 `C:\Program Files` 会因权限失败，建议装到 `%LOCALAPPDATA%\Programs\Music` 这类用户目录。
 6. `scripts/publish-release.ps1` 保存为 **UTF-8 with BOM**（Windows PowerShell 5.1 需要 BOM 才能正确读中文），编辑时请勿改成 ANSI 或无 BOM 的 UTF-8。
@@ -372,8 +413,64 @@ $adb = "$env:ANDROID_HOME\platform-tools\adb.exe"
 ### 其它注意
 
 - 构建时有 `XA0141` 警告：libvlc 3.6.5 的 `libvlc.so` 未按 16KB 页对齐，Android 16 起会要求，属于上游 NuGet 包的问题，目前可忽略。
-- Android 上的 `UpdateService.CanSelfUpdate` 为 `false`（无法自我覆盖安装），升级走应用商店。
+- Android 上的 `UpdateService.CanSelfUpdate` 为 `true`：下载 `.apk` 后经 `FileProvider` 交给系统安装器，由用户确认安装（需 `REQUEST_INSTALL_PACKAGES` 权限）。
 - `Music.Android` 已加入解决方案，因此 `dotnet build Music.slnx` 需要上述前置条件齐全；日常只构建桌面头即可。
+
+## iOS
+
+iOS 头已完成依赖注入接入与 **AVPlayer** 音频后端，界面与桌面 / Android 共用同一套 View 与自适应布局。**工程不在 `Music.slnx` 内**（避免在未安装 iOS workload 的 Windows 上执行 `dotnet build Music.slnx` 整体失败），需要单独构建。
+
+### 前置条件（仅 macOS）
+
+iOS 的真机 / 模拟器构建必须在 **macOS + Xcode** 上完成：
+
+```bash
+xcode-select --install          # 命令行工具，并 accept license
+dotnet workload install ios     # .NET 10 的 iOS workload
+```
+
+> Windows 上只能完成 C# 编译阶段，原生链接与打包仍需要 Mac。本仓库的开发机为 Windows，因此 iOS 工程只保证「不破坏现有三端构建」，首次编译 / 运行验证需在 Mac 上进行。
+
+### 构建与运行
+
+```bash
+dotnet restore src/Music.iOS/Music.iOS.csproj
+
+# 模拟器
+dotnet build src/Music.iOS/Music.iOS.csproj -f net10.0-ios -t:Run \
+    -p:RuntimeIdentifier=iossimulator-arm64
+
+# 真机 Debug（无开发者账号时用 -p:CodesignKey="" 关闭签名）
+dotnet build src/Music.iOS/Music.iOS.csproj -f net10.0-ios -c Debug \
+    -p:RuntimeIdentifier=ios-arm64 -p:CodesignKey=""
+
+# 真机 Release（验证 AOT / 裁剪）
+dotnet publish src/Music.iOS/Music.iOS.csproj -f net10.0-ios -c Release -r ios-arm64
+```
+
+### 音频后端
+
+iOS 上没有可用的 libvlc，改用系统 **AVFoundation / AVPlayer** 实现 `IAudioPlayer`，在 `AppHost` 中注册以覆盖核心默认的 LibVLC 实现，因此 iOS 包**不含任何 libvlc 原生库**。
+
+- 本地文件、FTP（已提前落盘到缓存）、Navidrome（http/https）三条链路 AVPlayer 都原生支持；
+- 后台播放需要 `UIBackgroundModes = [audio]`（Info.plist）与 `AVAudioSession` 类别 `Playback` 两者同时具备，缺一不可；
+- AVFoundation 不支持的格式（`.ogg / .opus / .wma / .ape / .wv / .dsf / .dff` 等）在装载时按扩展名拦截，给出明确提示而非静默失败。
+
+### 数据目录
+
+沙盒里只有 `Documents` 对用户可见，因此数据根目录指向 `Documents/MusicData`（由 `MUSIC_APP_DATA_DIR` 覆盖），并预留 `Documents/Music` 供用户导入音乐：
+
+```
+Documents/MusicData/   settings.json / library.db / cache / covers / lyrics
+Documents/Music/       用户放音乐文件、或从「文件」App 拖入
+```
+
+`Info.plist` 已开启 `UIFileSharingEnabled`，这两个目录会出现在「文件」App 与 Finder 中。添加本地音源复用现有音源页的文件夹选择器（系统「文件」选择器），不在 head 里放任何种子音源。
+
+### 自更新与 AOT
+
+- **自更新**：iOS 沙盒禁止应用自我覆盖安装，`CanSelfUpdate` 恒为 `false`，设置页会自动隐藏「下载并安装」按钮并显示提示，只能通过 App Store 更新。
+- **AOT**：iOS 禁止 JIT，真机 Release 本身就是 AOT。工程在 Release 下显式声明 `PublishTrimmed=true` + `TrimMode=partial`；代码层的两处 AOT 阻断项（`ViewLocator` 的反射类型解析、`System.Text.Json` 的反射序列化）已移除，改为显式 `switch` 映射与源生成（`JsonSerializerContext`）。
 
 ## 已知限制
 
@@ -383,4 +480,5 @@ $adb = "$env:ANDROID_HOME\platform-tools\adb.exe"
 - **SMTC 可见性**：非打包应用在部分 Windows 版本上不保证系统媒体中心能显示会话，不可用时静默降级。
 - **升级**：只覆盖同名文件（不删旧文件），没有增量更新、断点续传与自动回滚。
 - **尚未实现**：歌单（Playlists 表已预留）、搜索联想、桌面歌词悬浮窗。
+- **iOS 构建需 macOS**：Windows 上只能写代码、无法完成 iOS 的构建与运行验证；Phase 1 不含锁屏 / 控制中心 / 耳机线控（`MPNowPlayingInfoCenter` / `MPRemoteCommandCenter`）与 App Store 跳转更新。
 - **同一账号的密码目前以明文保存在 `settings.json` 中**，仅用于向对应服务器认证。
