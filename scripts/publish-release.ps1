@@ -6,7 +6,9 @@
     流程：清理 → dotnet publish 桌面 → 精简 libvlc → 打包 zip → 计算 SHA256
           →（可选）构建安卓 apk → 生成 latest.json（含 androidUrl/androidSha256）
           → 用 Gitea API 建/取目标 Tag 的 Release → 上传 zip/apk 附件
-          → 通过 contents API 把 latest.json 提交到仓库分支。
+          → 在本地 git 提交并推送 latest.json。
+            （不要改回 contents API：那会在远端多出一个本地没有的提交，
+             导致本地分支与远端分叉，之后每次提交代码 latest.json 都会冲突。）
 
     产物都在 artifacts/ 目录（已被 .gitignore 忽略）：
       artifacts/Music-<版本>.zip     桌面安装包，解压后覆盖安装目录
@@ -319,27 +321,38 @@ if ($SkipUpload) {
     }
 
     Write-Host '==> 提交 latest.json…' -ForegroundColor Cyan
-    $contentsUri = "$api/contents/latest.json"
-    $existing = $null
+    # 用本地 git 提交并推送，而不是走 Gitea contents API。
+    # contents API 会在远端凭空多出一个本地没有的提交，使本地分支与远端分叉；
+    # 之后每次提交代码都会因 latest.json 冲突而卡在「合并中」。
+    # 本地提交 + 推送可让两端始终同步，从根上消除这个分叉。
+    Push-Location $repoRoot
     try {
-        $existing = Invoke-RestMethod -Method Get -Uri "${contentsUri}?ref=$Branch" -Headers $headers -ErrorAction Stop
-    } catch {
-        $existing = $null
-    }
+        & git add -- latest.json
+        if ($LASTEXITCODE -ne 0) {
+            throw "git add latest.json 失败（退出码 $LASTEXITCODE）"
+        }
 
-    $putBody = [ordered]@{
-        content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
-        message = "chore: 更新 latest.json 到 $Version"
-        branch  = $Branch
-    }
-    if ($existing -and $existing.sha) {
-        $putBody.sha = $existing.sha
-    }
+        # 只提交 latest.json 这一个文件：--only 会忽略暂存区里用户的其它改动，
+        # 避免把未提交的代码一起卷进发布提交。
+        $dirty = & git status --porcelain -- latest.json
+        if ($null -eq $dirty) {
+            Write-Host '    latest.json 内容未变化，跳过提交'
+        } else {
+            & git commit --only -m "chore: 更新 latest.json 到 $Version" -- latest.json
+            if ($LASTEXITCODE -ne 0) {
+                throw "git commit latest.json 失败（退出码 $LASTEXITCODE）"
+            }
+        }
 
-    Invoke-RestMethod -Method Put -Uri $contentsUri -Headers $headers `
-        -ContentType 'application/json; charset=utf-8' `
-        -Body ([Text.Encoding]::UTF8.GetBytes(($putBody | ConvertTo-Json -Depth 3))) | Out-Null
-    Write-Host '    已提交 latest.json' -ForegroundColor Green
+        & git push origin $Branch
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "git push 失败：latest.json 已在本地提交但未推送，应用「检查更新」暂时看不到 $Version。请手动 push 后重试。"
+        } else {
+            Write-Host '    已提交并推送 latest.json' -ForegroundColor Green
+        }
+    } finally {
+        Pop-Location
+    }
 
     $uploaded = $true
 }

@@ -172,7 +172,7 @@ covers/          从标签或服务器导出的封面
 
 ## 发布新版本
 
-发布脚本 [scripts/publish-release.ps1](scripts/publish-release.ps1) 一键完成：构建桌面包 → （默认）构建安卓 apk → 生成 `latest.json` → 用 **Gitea API** 建 Release、上传附件、把清单提交到仓库分支。
+发布脚本 [scripts/publish-release.ps1](scripts/publish-release.ps1) 一键完成：构建桌面包 → （默认）构建安卓 apk → 生成 `latest.json` → 用 **Gitea API** 建 Release、上传附件，再在**本地 `git commit` + `git push`** 把清单提交到仓库分支。
 
 ### 前置条件
 
@@ -188,7 +188,7 @@ $env:MUSIC_GITEA_TOKEN = '<你的令牌>'    # 也可用 -Token 传入
 |---|---|---|
 | `-GiteaBaseUrl` | `https://www.294713.xyz` | Gitea 站点根地址 |
 | `-Repo` | `zhusenlin/Music` | `owner/repo` |
-| `-Branch` | `master` | 提交 `latest.json` 所依据的分支 |
+| `-Branch` | `master` | 提交并推送 `latest.json` 的分支 |
 | `-Tag` | `v<版本>` | Release 的 Tag |
 | `-Runtime` | `win-x64` | 桌面包架构 |
 | `-AndroidConfiguration` | `Debug` | 安卓构建配置 |
@@ -231,7 +231,7 @@ $notes = @"
 1. `dotnet publish` 桌面（`-p:Version` 注入版本号）→ 剔除 libvlc 里非当前架构的目录 → 剔除 pdb（默认省约 100MB）→ 校验 zip 根目录有 `Music.Desktop.exe` → 打包 → 计算 SHA256；
 2. （默认）构建安卓 apk：`versionCode` 由版本号推导，取 `*-Signed.apk`；Debug 用系统调试密钥即可直接安装，Release 需自行配置签名；
 3. 生成 `latest.json`（`url` 指向 Gitea Release 附件；含安卓包时附 `androidUrl`/`androidSha256`）并**写到仓库根目录**；
-4. 用 Gitea API 建/复用目标 Tag 的 Release → 删除同名旧附件后上传 zip / apk → 通过 contents API 把 `latest.json` 提交到 `-Branch`。
+4. 用 Gitea API 建/复用目标 Tag 的 Release → 删除同名旧附件后上传 zip / apk → 在**本地** `git commit` 并 `git push`，把 `latest.json` 提交到 `-Branch`（不走 contents API，避免远端多出一个本地没有的提交而造成分叉 / 冲突）。
 
 产物：
 
