@@ -1,8 +1,8 @@
 {
-    "version":  "1.2.0",
-    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.0/Music-1.2.0.zip",
-    "sha256":  "e38335b5c3720fa6f98bff8cd57f5975a4dc2ac5c7f24ee09f6d56ec22ad40b0",
-    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.0/Music-1.2.0.apk",
-    "androidSha256":  "c875ad5dd7fa9c89db7cc1c8def81eef8f6a6abb897f423876a1888a27a920b4",
-    "notes":  "1、支持删除音乐 \n2、解决发现的音乐收藏或添加到歌单后找不到"
+    "version":  "1.2.1",
+    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.1/Music-1.2.1.zip",
+    "sha256":  "a63edcc1c8e09e2d9dcaf4c8888dad13d96a1facfc49e1d9b0f9597abf3f34a1",
+    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.1/Music-1.2.1.apk",
+    "androidSha256":  "9ff4a315c91f417f82adf743880021f144b837bb2f18486cac58684bc4f18d05",
+    "notes":  "音乐库手机端右滑显示添加歌单按钮"
 }
