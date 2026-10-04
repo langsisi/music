@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -8,6 +9,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml;
 using System.Xml.Linq;
 using Music.Models;
 
@@ -219,16 +221,28 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
         using var response = await SendAsync(PropFindMethod, directoryUri, depth: "1", content: PropFindBody, cancellationToken)
             .ConfigureAwait(false);
 
-        if (response.StatusCode != HttpStatusCode.MultiStatus)
+        var body = await ReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
+
+        // 标准响应是 207 Multi-Status，但不少服务端（或前置反向代理）会把 PROPFIND 归一化成 200 OK，
+        // 两者正文都是 multistatus，必须都接受，否则同步会误报「PROPFIND 失败：200 OK」。
+        if (response.StatusCode is not (HttpStatusCode.MultiStatus or HttpStatusCode.OK))
         {
-            throw new IOException($"PROPFIND 失败：{(int)response.StatusCode} {response.ReasonPhrase}");
+            throw new IOException(
+                $"PROPFIND 失败：{(int)response.StatusCode} {response.ReasonPhrase}{Snippet(body)}");
         }
 
-        await using var stream = await response.Content
-            .ReadAsStreamAsync(cancellationToken)
-            .ConfigureAwait(false);
+        XDocument document;
+        try
+        {
+            document = XDocument.Parse(body, LoadOptions.None);
+        }
+        catch (XmlException ex)
+        {
+            // 例如地址填到了非 WebDAV 入口、被反代重定向到登录页，返回的其实是 HTML。
+            throw new IOException(
+                $"服务端没有返回 WebDAV XML（{(int)response.StatusCode} {response.ReasonPhrase}）：{ex.Message}{Snippet(body)}");
+        }
 
-        var document = XDocument.Load(stream, LoadOptions.None);
         var results = new List<(Uri, bool, long)>();
 
         foreach (var element in document.Descendants())
@@ -264,6 +278,43 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// 读取响应正文并按需解压。移动网络链路（运营商透明代理 / 网关）可能把正文压成 gzip 却丢掉
+    /// <c>Content-Encoding</c>，此时 HttpClient 的自动解压不起作用，正文会以原始压缩字节进入 XML 解析
+    /// （表现为 “0x1F is an invalid character”）。这里按 gzip 魔数兜底解一次。
+    /// </summary>
+    private static async Task<string> ReadBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+
+        if (bytes.Length > 2 && bytes[0] == 0x1F && bytes[1] == 0x8B)
+        {
+            using var compressed = new MemoryStream(bytes);
+            await using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip, Encoding.UTF8);
+            return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Encoding.UTF8.GetString(bytes);
+    }
+
+    /// <summary>把响应正文截断成一小段拼进报错，方便看出服务端到底返回了什么（HTML 登录页 / 网关错误页等）。</summary>
+    private static string Snippet(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return string.Empty;
+        }
+
+        var text = body.Trim();
+        if (text.Length > 200)
+        {
+            text = text[..200];
+        }
+
+        return $"；响应正文：{text.Replace('\r', ' ').Replace('\n', ' ')}";
     }
 
     /// <summary>逐级 MKCOL 创建目录；已存在（405）与父级缺失（409）都视为可继续。</summary>

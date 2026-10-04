@@ -12,6 +12,11 @@
     <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    <!-- 默认的 Android 原生 HTTP 处理器（底层 java.net.HttpURLConnection）只允许
+         GET/POST/HEAD/OPTIONS/PUT/DELETE/TRACE/PATCH，WebDAV 必需的 PROPFIND 会被直接拒绝
+         （报错 “Expected one of: [...] but was PROPFIND”）。改用托管 SocketsHttpHandler，
+         它支持任意 HTTP 方法，行为也与桌面端一致。 -->
+    <UseNativeHttpHandler>false</UseNativeHttpHandler>
     <!-- Debug 包默认走 Fast Deployment（托管 DLL 不进 APK，靠 adb 推送到 .__override__），
          直接拷贝/adb install 会因找不到程序集而闪退。强制打进 APK，让包在任何设备上可独立运行。 -->
     <EmbedAssembliesIntoApk>True</EmbedAssembliesIntoApk>

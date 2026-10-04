@@ -36,8 +36,14 @@ public static class ServiceCollectionExtensions
 
         // 音源
         // 远程文件客户端用独立 HttpClient：不设 5 分钟超时，避免大文件上传被中断。
+        // 显式开启自动解压：移动网络链路上的网关/代理可能对响应做 gzip 压缩，默认的不解压会让
+        // WebDAV 的 XML 正文变成压缩字节（表现为 “0x1F is an invalid character”）。
         services.AddSingleton<IRemoteFileClientFactory>(_ =>
-            new RemoteFileClientFactory(new System.Net.Http.HttpClient
+            new RemoteFileClientFactory(new System.Net.Http.HttpClient(
+                new System.Net.Http.SocketsHttpHandler
+                {
+                    AutomaticDecompression = System.Net.DecompressionMethods.All,
+                })
             {
                 Timeout = System.Threading.Timeout.InfiniteTimeSpan,
             }));
