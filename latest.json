@@ -1,8 +1,8 @@
 {
-    "version":  "1.1.5",
-    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.5/Music-1.1.5.zip",
-    "sha256":  "d82b80459519edafe022d771413ce90d4c77a0a1f496515e84ceefefcf3461e4",
-    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.5/Music-1.1.5.apk",
-    "androidSha256":  "6561be6628787f818635dc35b0bbe349ef5d94c103d204e2670dad995a083815",
-    "notes":  "1、首页增加每日推荐，随机推荐2、发现页可以搜索音乐并支持下载"
+    "version":  "1.1.6",
+    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.6/Music-1.1.6.zip",
+    "sha256":  "90387bedd3fa539a82e7b783c7ca7767c9e9f5303d790143826e9bb87b1fbd9d",
+    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.6/Music-1.1.6.apk",
+    "androidSha256":  "a1dd9d13b2ce72798b7ae01ccbd2206c8370099cc462ceb8ed7025f579968612",
+    "notes":  "1、修改APP图标\n2、安卓APP支持添加本地默认目录,自动申请权限"
 }
