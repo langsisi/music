@@ -1,8 +1,8 @@
 {
-    "version":  "1.1.8",
-    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.8/Music-1.1.8.zip",
-    "sha256":  "06b5dd62bbdf7557c0be9b551ab1a4bf4e50367c1e46cec1e022c9b1fa333c5d",
-    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.8/Music-1.1.8.apk",
-    "androidSha256":  "8c926b9395105d256f35ece91327792f539d004663676f32a670fb262602994e",
-    "notes":  "1、音源增加支持SMB,WebDav"
+    "version":  "1.1.9",
+    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.9/Music-1.1.9.zip",
+    "sha256":  "dd7eadbaa690bd041afda6efefa7db7b58e1201a74ebc614cd9f7a0c4ee0dc24",
+    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.9/Music-1.1.9.apk",
+    "androidSha256":  "c23fdb2b93d865885cad31df37a1b95311ca6e180a2688e83dbaadf603969d81",
+    "notes":  "优化安卓端webdav无法同步问题"
 }
