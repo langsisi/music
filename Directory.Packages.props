@@ -23,6 +23,8 @@
     <PackageVersion Include="TagLibSharp" Version="2.3.0" />
     <!-- FTP 音源（跨平台托管实现，无原生依赖） -->
     <PackageVersion Include="FluentFTP" Version="55.0.0" />
+    <!-- SMB 音源（纯托管 SMB2/3 客户端，无原生依赖） -->
+    <PackageVersion Include="SMBLibrary" Version="1.5.8.1" />
     <!-- Local storage: favorites / categories / audio cache index -->
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />

@@ -57,7 +57,7 @@ Music.slnx
 | `Services/Update/` | 在线升级 |
 | `ViewModels/`、`Views/`、`Styles/` | 界面 |
 
-**分层铁律**：`Music`（核心）只引用跨平台的托管程序集，**绝不**引用 `VideoLAN.LibVLC.Windows` 或任何 WinRT API；原生库只放在各 head 项目里，平台能力通过核心层定义的接口（`ISystemMediaService`、`IFtpFileClient` 等）由 head 提供实现。
+**分层铁律**：`Music`（核心）只引用跨平台的托管程序集，**绝不**引用 `VideoLAN.LibVLC.Windows` 或任何 WinRT API；原生库只放在各 head 项目里，平台能力通过核心层定义的接口（`ISystemMediaService`、`IRemoteFileClient` 等）由 head 提供实现。
 
 ## 快速开始
 

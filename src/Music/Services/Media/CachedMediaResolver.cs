@@ -11,7 +11,7 @@ namespace Music.Services.Media;
 /// 带磁盘缓存的取流策略：
 /// <list type="bullet">
 /// <item>本地曲目：直接返回路径，不进缓存。</item>
-/// <item>FTP：无 Range 语义，必须先下载到缓存再本地播放（拖动进度不会重传整个文件）。</item>
+/// <item>FTP/SMB/WebDAV：无 Range 语义，必须先下载到缓存再本地播放（拖动进度不会重传整个文件）。</item>
 /// <item>HTTP（Navidrome）：服务端支持 Range，直连流式播放，同时后台落盘供下次复用。</item>
 /// <item>在线（GD 音乐台）：流地址有时效，每次播放现取，不做缓存。</item>
 /// </list>
@@ -69,7 +69,7 @@ public sealed class CachedMediaResolver : IMediaResolver
             return cached;
         }
 
-        if (track.SourceType == MusicSourceType.Ftp)
+        if (track.SourceType is MusicSourceType.Ftp or MusicSourceType.Smb or MusicSourceType.WebDav)
         {
             var local = await _cache
                 .DownloadAsync(track, null, cancellationToken)

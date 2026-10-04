@@ -14,6 +14,12 @@ public enum MusicSourceType
 
     /// <summary>在线音源（GD 音乐台）。曲目为临时对象，不入本地索引。</summary>
     Online = 3,
+
+    /// <summary>SMB / CIFS 共享。</summary>
+    Smb = 4,
+
+    /// <summary>WebDAV 服务器。</summary>
+    WebDav = 5,
 }
 
 /// <summary>音源扫描进度。<see cref="Total"/> 为 0 表示总数未知。</summary>

@@ -5,20 +5,21 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Music.Models;
-using Music.Services.Ftp;
+using Music.Services.Remote;
 
 namespace Music.Services.Sources;
 
 /// <summary>
-/// FTP 音源：递归列出远端目录，把音频文件登记为曲目。
-/// FTP 没有元数据接口，标题取自文件名、专辑取自所在目录；播放时先整文件下载到缓存（见 <c>SqliteAudioCache</c>）。
+/// 文件协议音源（FTP / SMB / WebDAV）：递归列出远端目录，把音频文件登记为曲目。
+/// 这类协议没有元数据接口，标题取自文件名、专辑取自所在目录；
+/// 播放时先整文件下载到缓存（见 <c>SqliteAudioCache</c>）。
 /// </summary>
-public sealed class FtpMusicSource : IMusicSource, IConnectionTestableMusicSource
+public sealed class RemoteFileMusicSource : IMusicSource, IConnectionTestableMusicSource
 {
-    private readonly FtpSourceConfig _config;
-    private readonly IFtpFileClientFactory _clientFactory;
+    private readonly MusicSourceConfig _config;
+    private readonly IRemoteFileClientFactory _clientFactory;
 
-    public FtpMusicSource(FtpSourceConfig config, IFtpFileClientFactory clientFactory)
+    public RemoteFileMusicSource(MusicSourceConfig config, IRemoteFileClientFactory clientFactory)
     {
         _config = config;
         _clientFactory = clientFactory;
@@ -26,7 +27,16 @@ public sealed class FtpMusicSource : IMusicSource, IConnectionTestableMusicSourc
 
     public MusicSourceConfig Config => _config;
 
-    public MusicSourceType Type => MusicSourceType.Ftp;
+    public MusicSourceType Type => _config.Type;
+
+    /// <summary>起始目录，只有 FTP/SMB/WebDAV 才有该字段。</summary>
+    private string RootPath => _config switch
+    {
+        FtpSourceConfig ftp => ftp.RootPath,
+        SmbSourceConfig smb => smb.RootPath,
+        WebDavSourceConfig webDav => webDav.RootPath,
+        _ => "/",
+    };
 
     public async Task<IReadOnlyList<Track>> GetTracksAsync(
         IProgress<ScanProgress>? progress,
@@ -35,7 +45,7 @@ public sealed class FtpMusicSource : IMusicSource, IConnectionTestableMusicSourc
         await using var client = _clientFactory.Create(_config);
 
         await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
-        var entries = await client.ListAsync(_config.RootPath, progress, cancellationToken).ConfigureAwait(false);
+        var entries = await client.ListAsync(RootPath, progress, cancellationToken).ConfigureAwait(false);
 
         var files = entries
             .Where(entry => !entry.IsDirectory && AudioFileTypes.IsAudioFile(entry.Path))
@@ -53,7 +63,7 @@ public sealed class FtpMusicSource : IMusicSource, IConnectionTestableMusicSourc
             {
                 Id = TrackKey.Create(_config.Id, remotePath),
                 SourceId = _config.Id,
-                SourceType = MusicSourceType.Ftp,
+                SourceType = _config.Type,
                 Path = BuildDisplayUri(remotePath),
                 RemoteId = remotePath,
                 Title = Path.GetFileNameWithoutExtension(remotePath),
@@ -75,9 +85,20 @@ public sealed class FtpMusicSource : IMusicSource, IConnectionTestableMusicSourc
     /// <summary>远端路径统一成 '/' 形式，保证曲目 Id 在不同服务器写法下保持稳定。</summary>
     private static string NormalizeRemotePath(string path) => path.Replace('\\', '/');
 
+    /// <summary>用于界面展示的地址，取流时不使用该地址。</summary>
     private string BuildDisplayUri(string remotePath)
     {
         var suffix = remotePath.StartsWith('/') ? remotePath : "/" + remotePath;
-        return $"ftp://{_config.Host}:{_config.Port}{suffix}";
+
+        return _config switch
+        {
+            FtpSourceConfig ftp => $"ftp://{ftp.Host}:{ftp.Port}{suffix}",
+            SmbSourceConfig smb => $"smb://{smb.Host}/{smb.ShareName}{suffix}",
+            WebDavSourceConfig webDav => $"{webDav.BaseUrl.TrimEnd('/')}{NormalizeRoot(webDav.RootPath)}{suffix}",
+            _ => suffix,
+        };
     }
+
+    private static string NormalizeRoot(string rootPath) =>
+        string.IsNullOrWhiteSpace(rootPath) || rootPath == "/" ? string.Empty : "/" + rootPath.Trim('/');
 }

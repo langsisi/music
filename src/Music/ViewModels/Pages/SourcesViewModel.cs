@@ -17,6 +17,9 @@ public partial class SourcesViewModel : PageViewModel
     /// <summary>FTP 默认端口。</summary>
     private const decimal DefaultFtpPort = 21;
 
+    /// <summary>SMB 默认端口（仅 445 直连 / 139 NetBIOS 有效）。</summary>
+    private const int DefaultSmbPort = 445;
+
     private readonly ISettingsStore _settings;
     private readonly IFilePickerService _picker;
     private readonly LibrarySyncService _sync;
@@ -44,7 +47,7 @@ public partial class SourcesViewModel : PageViewModel
 
     public override string Title => "音源";
 
-    public override string Description => "添加与管理本地文件夹、FTP 与 Navidrome 音源。";
+    public override string Description => "添加与管理本地文件夹、FTP、SMB、WebDAV 与 Navidrome 音源。";
 
     public ObservableCollection<MusicSourceConfig> Sources => _settings.Current.Sources;
 
@@ -91,7 +94,7 @@ public partial class SourcesViewModel : PageViewModel
         await Sync(config);
     }
 
-    // ---------------- 远程音源编辑（Navidrome / FTP 共用一套表单） ----------------
+    // ---------------- 远程音源编辑（FTP / SMB / WebDAV / Navidrome 共用一套表单） ----------------
 
     [ObservableProperty]
     private bool _isEditorOpen;
@@ -101,19 +104,52 @@ public partial class SourcesViewModel : PageViewModel
 
     partial void OnEditorTypeChanged(MusicSourceType value)
     {
-        OnPropertyChanged(nameof(IsFtpEditor));
+        OnPropertyChanged(nameof(ShowPort));
+        OnPropertyChanged(nameof(ShowRootPath));
+        OnPropertyChanged(nameof(ShowShareName));
+        OnPropertyChanged(nameof(ShowDomain));
+        OnPropertyChanged(nameof(ShowSmbPortHint));
+        OnPropertyChanged(nameof(ShowWebDavRootHint));
         OnPropertyChanged(nameof(EditorTitle));
         OnPropertyChanged(nameof(AddressLabel));
         OnPropertyChanged(nameof(AddressPlaceholder));
     }
 
-    public bool IsFtpEditor => EditorType == MusicSourceType.Ftp;
+    /// <summary>端口：FTP（21）与 SMB（445 / 139）才有意义。</summary>
+    public bool ShowPort => EditorType is MusicSourceType.Ftp or MusicSourceType.Smb;
 
-    public string EditorTitle => IsFtpEditor ? "FTP 服务器" : "Navidrome 服务器";
+    /// <summary>起始目录：三种文件协议都有。</summary>
+    public bool ShowRootPath =>
+        EditorType is MusicSourceType.Ftp or MusicSourceType.Smb or MusicSourceType.WebDav;
 
-    public string AddressLabel => IsFtpEditor ? "主机地址" : "服务器地址";
+    public bool ShowShareName => EditorType == MusicSourceType.Smb;
 
-    public string AddressPlaceholder => IsFtpEditor ? "ftp.example.com" : "https://music.example.com";
+    public bool ShowDomain => EditorType == MusicSourceType.Smb;
+
+    /// <summary>SMB 只支持 445 / 139，给出提示避免填写无效端口。</summary>
+    public bool ShowSmbPortHint => EditorType == MusicSourceType.Smb;
+
+    /// <summary>WebDAV 起始目录是 URL 路径而非 NAS 文件系统路径，给出提示。</summary>
+    public bool ShowWebDavRootHint => EditorType == MusicSourceType.WebDav;
+
+    public string EditorTitle => EditorType switch
+    {
+        MusicSourceType.Ftp => "FTP 服务器",
+        MusicSourceType.Smb => "SMB 共享",
+        MusicSourceType.WebDav => "WebDAV 服务器",
+        _ => "Navidrome 服务器",
+    };
+
+    public string AddressLabel =>
+        EditorType is MusicSourceType.Ftp or MusicSourceType.Smb ? "主机地址" : "服务器地址";
+
+    public string AddressPlaceholder => EditorType switch
+    {
+        MusicSourceType.Ftp => "ftp.example.com",
+        MusicSourceType.Smb => "192.168.1.10",
+        MusicSourceType.WebDav => "https://dav.example.com/dav",
+        _ => "https://music.example.com",
+    };
 
     [ObservableProperty]
     private string _editorName = string.Empty;
@@ -133,6 +169,14 @@ public partial class SourcesViewModel : PageViewModel
     [ObservableProperty]
     private string _editorRootPath = "/";
 
+    /// <summary>SMB 共享名。</summary>
+    [ObservableProperty]
+    private string _editorShareName = string.Empty;
+
+    /// <summary>SMB 域 / 工作组，本地账号留空。</summary>
+    [ObservableProperty]
+    private string _editorDomain = string.Empty;
+
     [ObservableProperty]
     private string _editorStatusText = string.Empty;
 
@@ -146,6 +190,12 @@ public partial class SourcesViewModel : PageViewModel
     private void AddFtp() => OpenEditor(MusicSourceType.Ftp, null);
 
     [RelayCommand]
+    private void AddSmb() => OpenEditor(MusicSourceType.Smb, null);
+
+    [RelayCommand]
+    private void AddWebDav() => OpenEditor(MusicSourceType.WebDav, null);
+
+    [RelayCommand]
     private void EditSource(MusicSourceConfig source)
     {
         switch (source)
@@ -155,6 +205,12 @@ public partial class SourcesViewModel : PageViewModel
                 break;
             case FtpSourceConfig:
                 OpenEditor(MusicSourceType.Ftp, source);
+                break;
+            case SmbSourceConfig:
+                OpenEditor(MusicSourceType.Smb, source);
+                break;
+            case WebDavSourceConfig:
+                OpenEditor(MusicSourceType.WebDav, source);
                 break;
         }
     }
@@ -237,13 +293,24 @@ public partial class SourcesViewModel : PageViewModel
 
         var navidrome = source as NavidromeSourceConfig;
         var ftp = source as FtpSourceConfig;
+        var smb = source as SmbSourceConfig;
+        var webDav = source as WebDavSourceConfig;
 
         EditorName = source?.Name ?? string.Empty;
-        EditorAddress = navidrome?.BaseUrl ?? ftp?.Host ?? string.Empty;
-        EditorUser = navidrome?.UserName ?? ftp?.UserName ?? string.Empty;
-        EditorPassword = navidrome?.Password ?? ftp?.Password ?? string.Empty;
-        EditorPort = ftp?.Port ?? (int)DefaultFtpPort;
-        EditorRootPath = string.IsNullOrWhiteSpace(ftp?.RootPath) ? "/" : ftp.RootPath;
+        EditorAddress = navidrome?.BaseUrl ?? ftp?.Host ?? smb?.Host ?? webDav?.BaseUrl ?? string.Empty;
+        EditorUser = navidrome?.UserName ?? ftp?.UserName ?? smb?.UserName ?? webDav?.UserName ?? string.Empty;
+        EditorPassword = navidrome?.Password ?? ftp?.Password ?? smb?.Password ?? webDav?.Password ?? string.Empty;
+        EditorPort = type switch
+        {
+            MusicSourceType.Ftp => ftp?.Port ?? (int)DefaultFtpPort,
+            MusicSourceType.Smb => smb?.Port ?? DefaultSmbPort,
+            _ => null,
+        };
+
+        var root = ftp?.RootPath ?? smb?.RootPath ?? webDav?.RootPath;
+        EditorRootPath = string.IsNullOrWhiteSpace(root) ? "/" : root;
+        EditorShareName = smb?.ShareName ?? string.Empty;
+        EditorDomain = smb?.Domain ?? string.Empty;
         EditorStatusText = string.Empty;
         IsEditorOpen = true;
     }
@@ -268,6 +335,23 @@ public partial class SourcesViewModel : PageViewModel
                 ftp.Password = editedFtp.Password;
                 ftp.RootPath = editedFtp.RootPath;
                 break;
+
+            case SmbSourceConfig smb when source is SmbSourceConfig editedSmb:
+                smb.Host = editedSmb.Host;
+                smb.Port = editedSmb.Port;
+                smb.ShareName = editedSmb.ShareName;
+                smb.RootPath = editedSmb.RootPath;
+                smb.UserName = editedSmb.UserName;
+                smb.Password = editedSmb.Password;
+                smb.Domain = editedSmb.Domain;
+                break;
+
+            case WebDavSourceConfig webDav when source is WebDavSourceConfig editedWebDav:
+                webDav.BaseUrl = editedWebDav.BaseUrl;
+                webDav.RootPath = editedWebDav.RootPath;
+                webDav.UserName = editedWebDav.UserName;
+                webDav.Password = editedWebDav.Password;
+                break;
         }
     }
 
@@ -280,19 +364,26 @@ public partial class SourcesViewModel : PageViewModel
         var address = EditorAddress?.Trim() ?? string.Empty;
         if (address.Length == 0)
         {
-            error = IsFtpEditor ? "请填写主机地址。" : "请填写服务器地址。";
+            error = EditorType is MusicSourceType.Ftp or MusicSourceType.Smb
+                ? "请填写主机地址。"
+                : "请填写服务器地址。";
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(EditorUser))
+        // SMB 允许空用户名以支持来宾共享 / 匿名访问。
+        if (EditorType != MusicSourceType.Smb && string.IsNullOrWhiteSpace(EditorUser))
         {
             error = "请填写用户名。";
             return false;
         }
 
-        return IsFtpEditor
-            ? TryBuildFtp(address, out config, out error)
-            : TryBuildNavidrome(address, out config, out error);
+        return EditorType switch
+        {
+            MusicSourceType.Ftp => TryBuildFtp(address, out config, out error),
+            MusicSourceType.Smb => TryBuildSmb(address, out config, out error),
+            MusicSourceType.WebDav => TryBuildWebDav(address, out config, out error),
+            _ => TryBuildNavidrome(address, out config, out error),
+        };
     }
 
     private bool TryBuildNavidrome(string address, out MusicSourceConfig config, out string error)
@@ -328,23 +419,9 @@ public partial class SourcesViewModel : PageViewModel
         config = null!;
         error = string.Empty;
 
-        // 允许直接粘贴 ftp://host:port 形式。
-        var host = address;
-        if (host.Contains("://", StringComparison.Ordinal))
+        if (!TryNormalizeHost(address, "ftp.example.com", out var host, out error))
         {
-            if (!Uri.TryCreate(host, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.Host))
-            {
-                error = "主机地址格式不正确，例如 ftp.example.com。";
-                return false;
-            }
-
-            host = uri.Host;
-        }
-
-        var root = string.IsNullOrWhiteSpace(EditorRootPath) ? "/" : EditorRootPath.Trim();
-        if (!root.StartsWith('/'))
-        {
-            root = "/" + root;
+            return false;
         }
 
         config = new FtpSourceConfig
@@ -354,10 +431,106 @@ public partial class SourcesViewModel : PageViewModel
             Port = EditorPort is null ? (int)DefaultFtpPort : (int)decimal.Round(EditorPort.Value),
             UserName = EditorUser.Trim(),
             Password = EditorPassword ?? string.Empty,
-            RootPath = root,
+            RootPath = NormalizeRoot(EditorRootPath),
         };
 
         return true;
+    }
+
+    private bool TryBuildSmb(string address, out MusicSourceConfig config, out string error)
+    {
+        config = null!;
+        error = string.Empty;
+
+        if (!TryNormalizeHost(address, "192.168.1.10", out var host, out error))
+        {
+            return false;
+        }
+
+        var share = EditorShareName?.Trim() ?? string.Empty;
+        if (share.Length == 0)
+        {
+            error = "请填写共享名，例如 music。";
+            return false;
+        }
+
+        // SMB 只支持 445（直连 TCP）与 139（NetBIOS），其余值归一化为 445。
+        var port = EditorPort is null ? DefaultSmbPort : (int)decimal.Round(EditorPort.Value);
+        if (port != 139)
+        {
+            port = DefaultSmbPort;
+        }
+
+        config = new SmbSourceConfig
+        {
+            Name = string.IsNullOrWhiteSpace(EditorName) ? "SMB 共享" : EditorName.Trim(),
+            Host = host,
+            Port = port,
+            ShareName = share,
+            RootPath = NormalizeRoot(EditorRootPath),
+            UserName = EditorUser?.Trim() ?? string.Empty,
+            Password = EditorPassword ?? string.Empty,
+            Domain = EditorDomain?.Trim() ?? string.Empty,
+        };
+
+        return true;
+    }
+
+    private bool TryBuildWebDav(string address, out MusicSourceConfig config, out string error)
+    {
+        config = null!;
+        error = string.Empty;
+
+        if (!address.Contains("://", StringComparison.Ordinal))
+        {
+            address = "https://" + address;
+        }
+
+        if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            error = "服务器地址格式不正确，例如 https://dav.example.com/dav。";
+            return false;
+        }
+
+        config = new WebDavSourceConfig
+        {
+            Name = string.IsNullOrWhiteSpace(EditorName) ? "WebDAV" : EditorName.Trim(),
+            BaseUrl = $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath.TrimEnd('/')}",
+            RootPath = NormalizeRoot(EditorRootPath),
+            UserName = EditorUser.Trim(),
+            Password = EditorPassword ?? string.Empty,
+        };
+
+        return true;
+    }
+
+    /// <summary>把用户输入的主机地址归一化成纯主机名（允许粘贴带 scheme 的完整地址）。</summary>
+    private static bool TryNormalizeHost(string address, string example, out string host, out string error)
+    {
+        error = string.Empty;
+        host = address;
+
+        if (!address.Contains("://", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.Host))
+        {
+            error = $"主机地址格式不正确，例如 {example}。";
+            return false;
+        }
+
+        host = uri.Host;
+        return true;
+    }
+
+    /// <summary>起始目录统一成以 '/' 开头。</summary>
+    private static string NormalizeRoot(string? root)
+    {
+        var value = string.IsNullOrWhiteSpace(root) ? "/" : root.Trim();
+        return value.StartsWith('/') ? value : "/" + value;
     }
 
     // ---------------- 同步与移除 ----------------

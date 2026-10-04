@@ -29,6 +29,8 @@
     <PackageReference Include="TagLibSharp" />
     <!-- FTP 音源 -->
     <PackageReference Include="FluentFTP" />
+    <!-- SMB 音源 -->
+    <PackageReference Include="SMBLibrary" />
     <!-- Favorites / categories / cache index -->
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <!-- DI -->

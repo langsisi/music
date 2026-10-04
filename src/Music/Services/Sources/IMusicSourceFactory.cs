@@ -1,7 +1,7 @@
 using System;
 using System.Net.Http;
 using Music.Models;
-using Music.Services.Ftp;
+using Music.Services.Remote;
 
 namespace Music.Services.Sources;
 
@@ -13,18 +13,20 @@ public interface IMusicSourceFactory
 public sealed class MusicSourceFactory : IMusicSourceFactory
 {
     private readonly HttpClient _httpClient;
-    private readonly IFtpFileClientFactory _ftpClientFactory;
+    private readonly IRemoteFileClientFactory _remoteClientFactory;
 
-    public MusicSourceFactory(HttpClient httpClient, IFtpFileClientFactory ftpClientFactory)
+    public MusicSourceFactory(HttpClient httpClient, IRemoteFileClientFactory remoteClientFactory)
     {
         _httpClient = httpClient;
-        _ftpClientFactory = ftpClientFactory;
+        _remoteClientFactory = remoteClientFactory;
     }
 
     public IMusicSource Create(MusicSourceConfig config) => config switch
     {
         LocalSourceConfig local => new LocalMusicSource(local),
-        FtpSourceConfig ftp => new FtpMusicSource(ftp, _ftpClientFactory),
+        FtpSourceConfig ftp => new RemoteFileMusicSource(ftp, _remoteClientFactory),
+        SmbSourceConfig smb => new RemoteFileMusicSource(smb, _remoteClientFactory),
+        WebDavSourceConfig webDav => new RemoteFileMusicSource(webDav, _remoteClientFactory),
         NavidromeSourceConfig navidrome => new NavidromeMusicSource(navidrome, _httpClient),
         _ => throw new NotSupportedException($"暂不支持的音源类型：{config.Type}"),
     };

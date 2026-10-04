@@ -7,7 +7,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Music.Models;
-using Music.Services.Ftp;
+using Music.Services.Metadata;
+using Music.Services.Remote;
 
 namespace Music.Services.Online;
 
@@ -16,29 +17,29 @@ public sealed record OnlineDownloadTarget(string Id, string Name, MusicSourceCon
 
 /// <summary>
 /// 把在线曲目下载到指定目标：
-/// 先按音质取流并下载音频，再补齐封面 / 歌词（写入标签 + 同名 .lrc），最后落到本地文件夹或 FTP。
-/// Navidrome 的 Subsonic 接口不支持上传，因此不做为下载目标（可在设置里配置指向其音乐目录的 FTP 音源）。
+/// 先按音质取流并下载音频，再补齐封面 / 歌词（写入标签 + 同名 .lrc），最后落到本地文件夹或 FTP/SMB/WebDAV。
+/// Navidrome 的 Subsonic 接口不支持上传，因此不做为下载目标（可在设置里配置指向其音乐目录的 FTP/SMB/WebDAV 音源）。
 /// </summary>
 public sealed class OnlineDownloadService
 {
     private readonly GdMusicClient _client;
     private readonly HttpClient _httpClient;
-    private readonly IFtpFileClientFactory _ftpClientFactory;
+    private readonly IRemoteFileClientFactory _remoteClientFactory;
     private readonly ISettingsStore _settings;
 
     public OnlineDownloadService(
         GdMusicClient client,
         HttpClient httpClient,
-        IFtpFileClientFactory ftpClientFactory,
+        IRemoteFileClientFactory remoteClientFactory,
         ISettingsStore settings)
     {
         _client = client;
         _httpClient = httpClient;
-        _ftpClientFactory = ftpClientFactory;
+        _remoteClientFactory = remoteClientFactory;
         _settings = settings;
     }
 
-    /// <summary>当前可用于下载的目标：已配置且可用的本地文件夹 / FTP 音源。</summary>
+    /// <summary>当前可用于下载的目标：已配置且可用的本地文件夹 / FTP / SMB / WebDAV 音源。</summary>
     public IReadOnlyList<OnlineDownloadTarget> GetTargets()
     {
         var targets = new List<OnlineDownloadTarget>();
@@ -57,6 +58,15 @@ public sealed class OnlineDownloadService
                     break;
 
                 case FtpSourceConfig ftp when !string.IsNullOrWhiteSpace(ftp.Host):
+                    targets.Add(new OnlineDownloadTarget(source.Id, source.DisplayName, source));
+                    break;
+
+                case SmbSourceConfig smb when !string.IsNullOrWhiteSpace(smb.Host)
+                                              && !string.IsNullOrWhiteSpace(smb.ShareName):
+                    targets.Add(new OnlineDownloadTarget(source.Id, source.DisplayName, source));
+                    break;
+
+                case WebDavSourceConfig webDav when !string.IsNullOrWhiteSpace(webDav.BaseUrl):
                     targets.Add(new OnlineDownloadTarget(source.Id, source.DisplayName, source));
                     break;
             }
@@ -95,7 +105,13 @@ public sealed class OnlineDownloadService
                 .GetLyricAsync(track.Source, track.LyricId, cancellationToken)
                 .ConfigureAwait(false);
 
-            ApplyTags(tempPath, track, coverBytes);
+            AudioTagWriter.Write(
+                tempPath,
+                coverBytes,
+                lyric,
+                track.DisplayTitle,
+                track.DisplayArtist,
+                track.Album);
 
             return await SaveToTargetAsync(target, tempPath, fileName, lyric, cancellationToken)
                 .ConfigureAwait(false);
@@ -120,13 +136,15 @@ public sealed class OnlineDownloadService
                     ?? throw new InvalidOperationException("该本地音源还没有可用的文件夹。");
                 return SaveToFolder(folder, tempAudioPath, fileName, lyric);
 
-            case FtpSourceConfig ftp:
-                return await UploadToFtpAsync(ftp, tempAudioPath, fileName, lyric, cancellationToken)
+            case FtpSourceConfig:
+            case SmbSourceConfig:
+            case WebDavSourceConfig:
+                return await UploadToRemoteAsync(target.Config, tempAudioPath, fileName, lyric, cancellationToken)
                     .ConfigureAwait(false);
 
             case NavidromeSourceConfig:
                 throw new NotSupportedException(
-                    "Navidrome 的接口不支持上传音乐。请配置一个指向其音乐目录的 FTP 音源作为下载目标。");
+                    "Navidrome 的接口不支持上传音乐。请配置一个指向其音乐目录的 FTP/SMB/WebDAV 音源作为下载目标。");
 
             default:
                 throw new NotSupportedException($"暂不支持的下载目标：{target.Name}");
@@ -152,17 +170,17 @@ public sealed class OnlineDownloadService
         return destination;
     }
 
-    private async Task<string> UploadToFtpAsync(
-        FtpSourceConfig ftp,
+    private async Task<string> UploadToRemoteAsync(
+        MusicSourceConfig config,
         string tempAudioPath,
         string fileName,
         string? lyric,
         CancellationToken cancellationToken)
     {
-        var remoteDir = string.IsNullOrWhiteSpace(ftp.RootPath) ? "/" : ftp.RootPath.TrimEnd('/');
+        var (remoteDir, displayPrefix) = ResolveRemoteTarget(config);
         var remoteAudio = $"{remoteDir}/{fileName}";
 
-        await using var client = _ftpClientFactory.Create(ftp);
+        await using var client = _remoteClientFactory.Create(config);
 
         await using (var audio = File.OpenRead(tempAudioPath))
         {
@@ -176,7 +194,33 @@ public sealed class OnlineDownloadService
             await client.UploadAsync(remoteLyric, lyricStream, null, cancellationToken).ConfigureAwait(false);
         }
 
-        return $"ftp://{ftp.Host}:{ftp.Port}{remoteAudio}";
+        return $"{displayPrefix}{remoteAudio}";
+    }
+
+    /// <summary>远端根目录（'/' 开头，无尾斜杠）与展示地址前缀。</summary>
+    private static (string RemoteDir, string DisplayPrefix) ResolveRemoteTarget(MusicSourceConfig config)
+    {
+        var root = config switch
+        {
+            FtpSourceConfig ftp => ftp.RootPath,
+            SmbSourceConfig smb => smb.RootPath,
+            WebDavSourceConfig webDav => webDav.RootPath,
+            _ => "/",
+        };
+
+        var remoteDir = string.IsNullOrWhiteSpace(root) || root == "/"
+            ? "/"
+            : "/" + root.Trim('/');
+
+        var displayPrefix = config switch
+        {
+            FtpSourceConfig ftp => $"ftp://{ftp.Host}:{ftp.Port}",
+            SmbSourceConfig smb => $"smb://{smb.Host}/{smb.ShareName}",
+            WebDavSourceConfig webDav => webDav.BaseUrl.TrimEnd('/'),
+            _ => string.Empty,
+        };
+
+        return (remoteDir, displayPrefix);
     }
 
     private async Task DownloadToFileAsync(
@@ -214,50 +258,6 @@ public sealed class OnlineDownloadService
 
         progress?.Report(1);
     }
-
-    /// <summary>写入标题 / 艺术家 / 专辑并嵌入封面；失败时静默（不影响文件本身）。</summary>
-    private static void ApplyTags(string path, OnlineTrack track, byte[]? coverBytes)
-    {
-        try
-        {
-            using var file = TagLib.File.Create(path);
-            file.Tag.Title = track.DisplayTitle;
-            file.Tag.Performers = [track.DisplayArtist];
-
-            if (!string.IsNullOrWhiteSpace(track.Album))
-            {
-                file.Tag.Album = track.Album;
-            }
-
-            if (coverBytes is { Length: > 0 })
-            {
-                file.Tag.Pictures =
-                [
-                    new TagLib.Picture(new TagLib.ByteVector(coverBytes))
-                    {
-                        Type = TagLib.PictureType.FrontCover,
-                        MimeType = DetectImageMime(coverBytes),
-                        Description = "Cover",
-                    },
-                ];
-            }
-
-            file.Save();
-        }
-        catch (Exception)
-        {
-            // 标签写入失败不阻止下载。
-        }
-    }
-
-    private static string DetectImageMime(byte[] bytes)
-        => bytes.Length >= 8
-            && bytes[0] == 0x89
-            && bytes[1] == 0x50
-            && bytes[2] == 0x4E
-            && bytes[3] == 0x47
-                ? "image/png"
-                : "image/jpeg";
 
     /// <summary>从流地址推断扩展名，取不到时退回 .mp3。</summary>
     private static string ResolveExtension(string url)

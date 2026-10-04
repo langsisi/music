@@ -69,6 +69,10 @@
                                                   Command="{Binding Sources.AddLocalFolderCommand}" />
                                         <MenuItem Header="FTP 服务器"
                                                   Command="{Binding Sources.AddFtpCommand}" />
+                                        <MenuItem Header="SMB 共享"
+                                                  Command="{Binding Sources.AddSmbCommand}" />
+                                        <MenuItem Header="WebDAV"
+                                                  Command="{Binding Sources.AddWebDavCommand}" />
                                         <MenuItem Header="Navidrome"
                                                   Command="{Binding Sources.AddNavidromeCommand}" />
                                     </MenuFlyout>
@@ -122,7 +126,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <!-- 远程音源编辑表单（添加 FTP / Navidrome 后内联展开） -->
+                    <!-- 远程音源编辑表单（添加 FTP / SMB / WebDAV / Navidrome 后内联展开） -->
                     <Border Classes="subpanel" IsVisible="{Binding Sources.IsEditorOpen}">
                         <StackPanel Spacing="12">
                             <TextBlock Text="{Binding Sources.EditorTitle}" Classes="h2" FontSize="16" />
@@ -138,16 +142,32 @@
                                          PlaceholderText="{Binding Sources.AddressPlaceholder}" />
                             </StackPanel>
 
-                            <StackPanel Spacing="5" IsVisible="{Binding Sources.IsFtpEditor}">
+                            <StackPanel Spacing="5" IsVisible="{Binding Sources.ShowPort}">
                                 <TextBlock Text="端口" Classes="section" />
                                 <NumericUpDown Value="{Binding Sources.EditorPort}"
                                                Minimum="1" Maximum="65535"
                                                Increment="1" FormatString="0" />
+                                <TextBlock FontSize="11" Classes="muted" TextWrapping="Wrap"
+                                           IsVisible="{Binding Sources.ShowSmbPortHint}"
+                                           Text="SMB 仅支持 445（直连）与 139（NetBIOS），其他值会按 445 处理。" />
                             </StackPanel>
 
-                            <StackPanel Spacing="5" IsVisible="{Binding Sources.IsFtpEditor}">
+                            <StackPanel Spacing="5" IsVisible="{Binding Sources.ShowShareName}">
+                                <TextBlock Text="共享名" Classes="section" />
+                                <TextBox Text="{Binding Sources.EditorShareName}" PlaceholderText="music" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="5" IsVisible="{Binding Sources.ShowRootPath}">
                                 <TextBlock Text="起始目录" Classes="section" />
                                 <TextBox Text="{Binding Sources.EditorRootPath}" PlaceholderText="/music" />
+                                <TextBlock FontSize="11" Classes="muted" TextWrapping="Wrap"
+                                           IsVisible="{Binding Sources.ShowWebDavRootHint}"
+                                           Text="填 WebDAV 服务里的 URL 相对路径（相对于上面的服务器地址），不是 NAS 上的文件系统路径；直接用服务根目录就留空或填 /。" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="5" IsVisible="{Binding Sources.ShowDomain}">
+                                <TextBlock Text="域 / 工作组（可选）" Classes="section" />
+                                <TextBox Text="{Binding Sources.EditorDomain}" PlaceholderText="本地账号留空" />
                             </StackPanel>
 
                             <StackPanel Spacing="5">
@@ -177,6 +197,23 @@
                             <TextBlock FontSize="12" Classes="muted" TextWrapping="Wrap"
                                        Text="密码以明文保存在本机设置文件中，仅用于向该服务器认证。" />
                         </StackPanel>
+                    </Border>
+
+                    <!-- 刮削写回：把封面 / 歌词直接写回音源本身 -->
+                    <Border Classes="setrow">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Path Grid.Column="0" Classes="seticon"
+                                  Data="{x:Static controls:AppIcons.Sources}"
+                                  Margin="0,0,14,0" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="刮削时写回音源" FontSize="15" />
+                                <TextBlock FontSize="12" Classes="muted" TextWrapping="Wrap"
+                                           Text="应用在线封面 / 歌词后，直接写入音频文件标签并生成同名 .lrc（Navidrome 与在线曲目除外）。" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                          OnContent="已开启" OffContent="已关闭"
+                                          IsChecked="{Binding ScrapeWriteBack}" />
+                        </Grid>
                     </Border>
 
                     <!-- 扫描进度 / 状态 -->

@@ -3,13 +3,13 @@ using Music.Services.Audio;
 using Music.Services.Broadcast;
 using Music.Services.Cache;
 using Music.Services.Dialogs;
-using Music.Services.Ftp;
 using Music.Services.Library;
 using Music.Services.Lyrics;
 using Music.Services.Media;
 using Music.Services.Metadata;
 using Music.Services.Metadata.Providers;
 using Music.Services.Online;
+using Music.Services.Remote;
 using Music.Services.Security;
 using Music.Services.Sources;
 using Music.Services.SystemMedia;
@@ -35,7 +35,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISecretProtector, IdentitySecretProtector>();
 
         // 音源
-        services.AddSingleton<IFtpFileClientFactory, FluentFtpFileClientFactory>();
+        // 远程文件客户端用独立 HttpClient：不设 5 分钟超时，避免大文件上传被中断。
+        services.AddSingleton<IRemoteFileClientFactory>(_ =>
+            new RemoteFileClientFactory(new System.Net.Http.HttpClient
+            {
+                Timeout = System.Threading.Timeout.InfiniteTimeSpan,
+            }));
         services.AddSingleton<IMusicSourceFactory, MusicSourceFactory>();
         services.AddSingleton<LibrarySyncService>();
 
@@ -63,6 +68,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMetadataProvider, KuwoMetadataProvider>();
         services.AddSingleton<IMetadataProvider, MiguMetadataProvider>();
         services.AddSingleton<IMetadataProvider, ItunesMetadataProvider>();
+        services.AddSingleton<SourceWriteBackService>();
         services.AddSingleton<MetadataScrapeService>();
 
         // 在线升级

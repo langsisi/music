@@ -10,6 +10,8 @@ namespace Music.Models;
 [JsonDerivedType(typeof(LocalSourceConfig), "local")]
 [JsonDerivedType(typeof(FtpSourceConfig), "ftp")]
 [JsonDerivedType(typeof(NavidromeSourceConfig), "navidrome")]
+[JsonDerivedType(typeof(SmbSourceConfig), "smb")]
+[JsonDerivedType(typeof(WebDavSourceConfig), "webdav")]
 public abstract class MusicSourceConfig
 {
     public string Id { get; set; } = System.Guid.NewGuid().ToString("N");
@@ -95,6 +97,64 @@ public sealed class NavidromeSourceConfig : MusicSourceConfig
     public override bool CanEdit => true;
 
     protected override string DefaultName => "Navidrome";
+
+    public override string Summary => string.IsNullOrWhiteSpace(BaseUrl)
+        ? "尚未配置服务器"
+        : BaseUrl;
+}
+
+/// <summary>SMB / CIFS 共享音源。</summary>
+public sealed class SmbSourceConfig : MusicSourceConfig
+{
+    public string Host { get; set; } = string.Empty;
+
+    /// <summary>SMB 只支持 445（直连 TCP）与 139（NetBIOS），其他值不生效。</summary>
+    public int Port { get; set; } = 445;
+
+    /// <summary>共享名，如 <c>music</c>。</summary>
+    public string ShareName { get; set; } = string.Empty;
+
+    /// <summary>共享内的起始目录，默认为根目录。</summary>
+    public string RootPath { get; set; } = "/";
+
+    public string UserName { get; set; } = string.Empty;
+
+    /// <summary>注意：目前以明文保存在本地设置文件中。</summary>
+    public string Password { get; set; } = string.Empty;
+
+    /// <summary>域 / 工作组，本地账号留空。</summary>
+    public string Domain { get; set; } = string.Empty;
+
+    public override MusicSourceType Type => MusicSourceType.Smb;
+
+    public override bool CanEdit => true;
+
+    protected override string DefaultName => "SMB 共享";
+
+    public override string Summary => string.IsNullOrWhiteSpace(Host) || string.IsNullOrWhiteSpace(ShareName)
+        ? "尚未配置服务器"
+        : $@"\\{Host}\{ShareName}{RootPath}";
+}
+
+/// <summary>WebDAV 音源。</summary>
+public sealed class WebDavSourceConfig : MusicSourceConfig
+{
+    /// <summary>形如 https://dav.example.com/dav 。</summary>
+    public string BaseUrl { get; set; } = string.Empty;
+
+    /// <summary>BaseUrl 下的起始目录，默认为根目录。</summary>
+    public string RootPath { get; set; } = "/";
+
+    public string UserName { get; set; } = string.Empty;
+
+    /// <summary>注意：目前以明文保存在本地设置文件中。</summary>
+    public string Password { get; set; } = string.Empty;
+
+    public override MusicSourceType Type => MusicSourceType.WebDav;
+
+    public override bool CanEdit => true;
+
+    protected override string DefaultName => "WebDAV";
 
     public override string Summary => string.IsNullOrWhiteSpace(BaseUrl)
         ? "尚未配置服务器"

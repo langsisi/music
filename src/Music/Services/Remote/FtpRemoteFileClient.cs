@@ -6,15 +6,15 @@ using System.Threading.Tasks;
 using FluentFTP;
 using Music.Models;
 
-namespace Music.Services.Ftp;
+namespace Music.Services.Remote;
 
 /// <summary>基于 FluentFTP 的实现。连接按需建立并在实例生命周期内复用。</summary>
-public sealed class FluentFtpFileClient : IFtpFileClient
+public sealed class FtpRemoteFileClient : IRemoteFileClient
 {
     private readonly AsyncFtpClient _client;
     private bool _connected;
 
-    public FluentFtpFileClient(FtpSourceConfig config)
+    public FtpRemoteFileClient(FtpSourceConfig config)
         => _client = new AsyncFtpClient(config.Host, config.UserName, config.Password, config.Port);
 
     public async Task ConnectAsync(CancellationToken cancellationToken)
@@ -28,7 +28,7 @@ public sealed class FluentFtpFileClient : IFtpFileClient
         _connected = true;
     }
 
-    public async Task<IReadOnlyList<FtpEntry>> ListAsync(
+    public async Task<IReadOnlyList<RemoteEntry>> ListAsync(
         string rootPath,
         IProgress<ScanProgress>? progress,
         CancellationToken cancellationToken)
@@ -42,7 +42,7 @@ public sealed class FluentFtpFileClient : IFtpFileClient
             .GetListing(path, FtpListOption.Recursive | FtpListOption.Size, cancellationToken)
             .ConfigureAwait(false);
 
-        var entries = new List<FtpEntry>(items.Length);
+        var entries = new List<RemoteEntry>(items.Length);
         foreach (var item in items)
         {
             // 链接不展开，避免目录自引用造成死循环。
@@ -51,7 +51,7 @@ public sealed class FluentFtpFileClient : IFtpFileClient
                 continue;
             }
 
-            entries.Add(new FtpEntry(item.FullName, item.Size, item.Type == FtpObjectType.Directory));
+            entries.Add(new RemoteEntry(item.FullName, item.Size, item.Type == FtpObjectType.Directory));
         }
 
         progress?.Report(new ScanProgress("已列出", entries.Count, entries.Count));

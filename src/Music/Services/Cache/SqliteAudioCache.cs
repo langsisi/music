@@ -7,7 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Music.Models;
-using Music.Services.Ftp;
+using Music.Services.Remote;
 
 namespace Music.Services.Cache;
 
@@ -34,7 +34,7 @@ public sealed class SqliteAudioCache : IAudioCache
 
     private readonly ISettingsStore _settings;
     private readonly HttpClient _httpClient;
-    private readonly IFtpFileClientFactory _ftpClientFactory;
+    private readonly IRemoteFileClientFactory _remoteClientFactory;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _initialized;
     private string? _pinnedKey;
@@ -42,11 +42,11 @@ public sealed class SqliteAudioCache : IAudioCache
     public SqliteAudioCache(
         ISettingsStore settings,
         HttpClient httpClient,
-        IFtpFileClientFactory ftpClientFactory)
+        IRemoteFileClientFactory remoteClientFactory)
     {
         _settings = settings;
         _httpClient = httpClient;
-        _ftpClientFactory = ftpClientFactory;
+        _remoteClientFactory = remoteClientFactory;
     }
 
     public long MaxBytes => (long)(_settings.Current.CacheLimitMb * 1024 * 1024);
@@ -283,7 +283,9 @@ public sealed class SqliteAudioCache : IAudioCache
                     .ConfigureAwait(false);
 
             case MusicSourceType.Ftp:
-                return await DownloadFtpAsync(track, tempPath, progress, cancellationToken)
+            case MusicSourceType.Smb:
+            case MusicSourceType.WebDav:
+                return await DownloadRemoteAsync(track, tempPath, progress, cancellationToken)
                     .ConfigureAwait(false);
 
             default:
@@ -291,26 +293,25 @@ public sealed class SqliteAudioCache : IAudioCache
         }
     }
 
-    /// <summary>FTP 没有 Range 语义，必须整文件下载到缓存后再本地播放。</summary>
-    private async Task<string?> DownloadFtpAsync(
+    /// <summary>FTP/SMB/WebDAV 没有 Range 语义，必须整文件下载到缓存后再本地播放。</summary>
+    private async Task<string?> DownloadRemoteAsync(
         Track track,
         string tempPath,
         IProgress<double>? progress,
         CancellationToken cancellationToken)
     {
         var config = _settings.Current.Sources
-            .OfType<FtpSourceConfig>()
             .FirstOrDefault(source => source.Id == track.SourceId)
-            ?? throw new InvalidOperationException($"找不到 FTP 音源配置：{track.SourceId}");
+            ?? throw new InvalidOperationException($"找不到音源配置：{track.SourceId}");
 
         var remotePath = track.RemoteId
-            ?? throw new InvalidOperationException($"FTP 曲目缺少远端路径：{track.Id}");
+            ?? throw new InvalidOperationException($"远端曲目缺少远端路径：{track.Id}");
 
-        await using var client = _ftpClientFactory.Create(config);
+        await using var client = _remoteClientFactory.Create(config);
         await using var destination = File.Create(tempPath);
         await client.DownloadAsync(remotePath, destination, progress, cancellationToken).ConfigureAwait(false);
 
-        // FTP 不返回 Content-Type，扩展名交给 DownloadAsync 从源地址推断。
+        // 远端协议不返回 Content-Type，扩展名交给 DownloadAsync 从源地址推断。
         return null;
     }
 

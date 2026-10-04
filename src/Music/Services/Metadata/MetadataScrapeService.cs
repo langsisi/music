@@ -17,22 +17,26 @@ public sealed record ScrapeResult(bool CoverUpdated, bool LyricsUpdated, string 
 
 /// <summary>
 /// 在线元数据刮削：先按数据源搜索候选，再由用户选定某一条后下载封面/歌词，
-/// <b>只缓存到本地</b>（不改动音乐文件），并落库更新封面路径与用户编辑过的元数据。
+/// 缓存到本地（封面 / 歌词缓存）并落库更新封面路径与用户编辑过的元数据；
+/// 若开启 <c>ScrapeWriteBack</c>，还会把封面与歌词写回音源本身（本地文件 / FTP / SMB / WebDAV）。
 /// </summary>
 public sealed class MetadataScrapeService
 {
     private readonly IReadOnlyList<IMetadataProvider> _providers;
     private readonly ILibraryStore _libraryStore;
     private readonly LyricsService _lyricsService;
+    private readonly SourceWriteBackService _writeBack;
 
     public MetadataScrapeService(
         IEnumerable<IMetadataProvider> providers,
         ILibraryStore libraryStore,
-        LyricsService lyricsService)
+        LyricsService lyricsService,
+        SourceWriteBackService writeBack)
     {
         _providers = providers.ToList();
         _libraryStore = libraryStore;
         _lyricsService = lyricsService;
+        _writeBack = writeBack;
     }
 
     /// <summary>可用数据源（注册顺序即界面上拉顺序）。</summary>
@@ -93,7 +97,7 @@ public sealed class MetadataScrapeService
         }
     }
 
-    /// <summary>把用户选定的候选应用为本地封面/歌词缓存（不改动音乐文件）。</summary>
+    /// <summary>把用户选定的候选应用为本地封面/歌词缓存，并按开关写回音源。</summary>
     public async Task<ScrapeResult> ApplyAsync(
         Track track,
         string providerId,
@@ -108,10 +112,13 @@ public sealed class MetadataScrapeService
 
         AppPaths.EnsureCreated();
 
-        var coverUpdated = await TrySaveCoverAsync(track, provider, candidate, cancellationToken)
+        var coverBytes = await TrySaveCoverAsync(track, provider, candidate, cancellationToken)
             .ConfigureAwait(false);
-        var lyricsUpdated = await TrySaveLyricsAsync(track, provider, candidate, cancellationToken)
+        var lyrics = await TrySaveLyricsAsync(track, provider, candidate, cancellationToken)
             .ConfigureAwait(false);
+
+        var coverUpdated = coverBytes is not null;
+        var lyricsUpdated = lyrics is not null;
 
         if (coverUpdated || lyricsUpdated)
         {
@@ -123,7 +130,24 @@ public sealed class MetadataScrapeService
             _lyricsService.Invalidate(track.Id);
         }
 
-        var message = (coverUpdated, lyricsUpdated) switch
+        var message = BuildMessage(provider, coverUpdated, lyricsUpdated);
+
+        var writeBack = await _writeBack
+            .WriteBackAsync(track, coverBytes, lyrics, cancellationToken)
+            .ConfigureAwait(false);
+
+        message = writeBack.Status switch
+        {
+            WriteBackStatus.Succeeded => $"{message} 已写回音源。",
+            WriteBackStatus.Failed => $"{message} 写回音源失败：{writeBack.Message}",
+            _ => message,
+        };
+
+        return new ScrapeResult(coverUpdated, lyricsUpdated, message);
+    }
+
+    private static string BuildMessage(IMetadataProvider provider, bool coverUpdated, bool lyricsUpdated)
+        => (coverUpdated, lyricsUpdated) switch
         {
             (true, true) => $"已应用{provider.DisplayName}的封面和歌词。",
             (true, false) => provider.SupportsLyrics
@@ -132,9 +156,6 @@ public sealed class MetadataScrapeService
             (false, true) => $"已应用{provider.DisplayName}的歌词，该结果没有封面。",
             _ => "该结果没有可用的封面或歌词。",
         };
-
-        return new ScrapeResult(coverUpdated, lyricsUpdated, message);
-    }
 
     /// <summary>把界面上编辑后的元数据落库（只写本地曲库，不改音乐文件）。</summary>
     public async Task SaveMetadataAsync(
@@ -157,7 +178,8 @@ public sealed class MetadataScrapeService
         await _libraryStore.UpsertTracksAsync([track], cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<bool> TrySaveCoverAsync(
+    /// <summary>下载封面并写入本地封面缓存，返回封面字节（没有则 null）。</summary>
+    private static async Task<byte[]?> TrySaveCoverAsync(
         Track track,
         IMetadataProvider provider,
         MetadataCandidate candidate,
@@ -174,12 +196,12 @@ public sealed class MetadataScrapeService
         }
         catch (Exception)
         {
-            return false;
+            return null;
         }
 
         if (data is null || data.Length == 0)
         {
-            return false;
+            return null;
         }
 
         // 文件名带内容哈希：PathToBitmapConverter 按路径缓存且不校验改时间，
@@ -190,10 +212,11 @@ public sealed class MetadataScrapeService
 
         await File.WriteAllBytesAsync(fullPath, data, cancellationToken).ConfigureAwait(false);
         track.CoverPath = fullPath;
-        return true;
+        return data;
     }
 
-    private static async Task<bool> TrySaveLyricsAsync(
+    /// <summary>下载歌词并写入本地歌词缓存，返回歌词文本（没有则 null）。</summary>
+    private static async Task<string?> TrySaveLyricsAsync(
         Track track,
         IMetadataProvider provider,
         MetadataCandidate candidate,
@@ -201,7 +224,7 @@ public sealed class MetadataScrapeService
     {
         if (!provider.SupportsLyrics)
         {
-            return false;
+            return null;
         }
 
         string? lyrics;
@@ -215,18 +238,18 @@ public sealed class MetadataScrapeService
         }
         catch (Exception)
         {
-            return false;
+            return null;
         }
 
         if (string.IsNullOrWhiteSpace(lyrics))
         {
-            return false;
+            return null;
         }
 
         await File.WriteAllTextAsync(
                 AppPaths.LyricsFileFor(track.Id), lyrics, Encoding.UTF8, cancellationToken)
             .ConfigureAwait(false);
-        return true;
+        return lyrics;
     }
 
     private async Task PersistAsync(Track track, CancellationToken cancellationToken)
