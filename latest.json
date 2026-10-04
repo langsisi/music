@@ -1,8 +1,8 @@
 {
-    "version":  "1.1.7",
-    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.7/Music-1.1.7.zip",
-    "sha256":  "663e1fb75e43727087eb1d816a076edc1472f64b739849736db234499e3ccb0f",
-    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.7/Music-1.1.7.apk",
-    "androidSha256":  "e07fe664686e574b9711bd85170c46d1a0a896fb269c960f9b7fbe158f2d241e",
-    "notes":  "解决申请手机权限时卡死"
+    "version":  "1.1.8",
+    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.8/Music-1.1.8.zip",
+    "sha256":  "06b5dd62bbdf7557c0be9b551ab1a4bf4e50367c1e46cec1e022c9b1fa333c5d",
+    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.8/Music-1.1.8.apk",
+    "androidSha256":  "8c926b9395105d256f35ece91327792f539d004663676f32a670fb262602994e",
+    "notes":  "1、音源增加支持SMB,WebDav"
 }
