@@ -97,11 +97,19 @@ public sealed class MetadataScrapeService
         }
     }
 
-    /// <summary>把用户选定的候选应用为本地封面/歌词缓存，并按开关写回音源。</summary>
+    /// <summary>
+    /// 把用户选定的候选应用为本地封面/歌词缓存，并把「封面 + 歌词 + 编辑后的元数据」一次性写回音源。
+    /// 元数据随同一次写回落地，避免对同一个远端文件重复下载上传。
+    /// </summary>
     public async Task<ScrapeResult> ApplyAsync(
         Track track,
         string providerId,
         MetadataCandidate candidate,
+        string? title = null,
+        string? artist = null,
+        string? album = null,
+        string? year = null,
+        IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
         var provider = FindProvider(providerId);
@@ -112,6 +120,27 @@ public sealed class MetadataScrapeService
 
         AppPaths.EnsureCreated();
 
+        // 先把界面上编辑过的元数据落到 track 上，下面一次写回就同时带上元数据。
+        if (title is not null)
+        {
+            track.Title = title.Trim();
+        }
+
+        if (artist is not null)
+        {
+            track.Artist = artist.Trim();
+        }
+
+        if (album is not null)
+        {
+            track.Album = album.Trim();
+        }
+
+        if (int.TryParse(year?.Trim(), out var parsedYear))
+        {
+            track.Year = parsedYear;
+        }
+
         var coverBytes = await TrySaveCoverAsync(track, provider, candidate, cancellationToken)
             .ConfigureAwait(false);
         var lyrics = await TrySaveLyricsAsync(track, provider, candidate, cancellationToken)
@@ -120,10 +149,7 @@ public sealed class MetadataScrapeService
         var coverUpdated = coverBytes is not null;
         var lyricsUpdated = lyrics is not null;
 
-        if (coverUpdated || lyricsUpdated)
-        {
-            await PersistAsync(track, cancellationToken).ConfigureAwait(false);
-        }
+        await PersistAsync(track, cancellationToken).ConfigureAwait(false);
 
         if (lyricsUpdated)
         {
@@ -133,14 +159,22 @@ public sealed class MetadataScrapeService
         var message = BuildMessage(provider, coverUpdated, lyricsUpdated);
 
         var writeBack = await _writeBack
-            .WriteBackAsync(track, coverBytes, lyrics, cancellationToken)
+            .WriteBackAsync(
+                track,
+                coverBytes,
+                lyrics,
+                title: track.Title,
+                artist: track.Artist,
+                album: track.Album,
+                progress: progress,
+                cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         message = writeBack.Status switch
         {
-            WriteBackStatus.Succeeded => $"{message} 已写回音源。",
+            WriteBackStatus.Succeeded => $"{message} 封面、歌词与元信息已写回音源。",
             WriteBackStatus.Failed => $"{message} 写回音源失败：{writeBack.Message}",
-            _ => message,
+            _ => writeBack.Message.Length > 0 ? $"{message} 未写回音源：{writeBack.Message}" : message,
         };
 
         return new ScrapeResult(coverUpdated, lyricsUpdated, message);
@@ -157,13 +191,18 @@ public sealed class MetadataScrapeService
             _ => "该结果没有可用的封面或歌词。",
         };
 
-    /// <summary>把界面上编辑后的元数据落库（只写本地曲库，不改音乐文件）。</summary>
-    public async Task SaveMetadataAsync(
+    /// <summary>
+    /// 把界面上编辑后的元数据落库，并写回音源文件本身的标签。
+    /// Navidrome 与在线曲目没有可写入口，由 <see cref="SourceWriteBackService"/> 自动跳过；
+    /// 封面 / 歌词传 null，保持文件里的原值不动。
+    /// </summary>
+    public async Task<WriteBackResult> SaveMetadataAsync(
         Track track,
         string title,
         string artist,
         string album,
         string year,
+        IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
         track.Title = title.Trim();
@@ -176,6 +215,23 @@ public sealed class MetadataScrapeService
         }
 
         await _libraryStore.UpsertTracksAsync([track], cancellationToken).ConfigureAwait(false);
+
+        if (track.Title.Length == 0 && track.Artist.Length == 0 && track.Album.Length == 0)
+        {
+            return WriteBackResult.Skipped;
+        }
+
+        return await _writeBack
+            .WriteBackAsync(
+                track,
+                coverBytes: null,
+                lyrics: null,
+                title: track.Title,
+                artist: track.Artist,
+                album: track.Album,
+                progress: progress,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>下载封面并写入本地封面缓存，返回封面字节（没有则 null）。</summary>

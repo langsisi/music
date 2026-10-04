@@ -12,7 +12,7 @@ public partial class MetadataSearchResultViewModel : ObservableObject
     {
         Candidate = candidate;
 
-        var parts = new List<string>(2);
+        var parts = new List<string>(3);
         if (!string.IsNullOrWhiteSpace(candidate.Artist))
         {
             parts.Add(candidate.Artist);
@@ -21,6 +21,11 @@ public partial class MetadataSearchResultViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(candidate.Album))
         {
             parts.Add(candidate.Album);
+        }
+
+        if (candidate.Year > 0)
+        {
+            parts.Add(candidate.Year.ToString());
         }
 
         Subtitle = string.Join(" · ", parts);

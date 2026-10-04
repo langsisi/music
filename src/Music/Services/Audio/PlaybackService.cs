@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using Music.Models;
+using Music.Services.Cache;
 using Music.Services.Media;
 
 namespace Music.Services.Audio;
@@ -16,21 +18,38 @@ public sealed class PlaybackService : IDisposable
     /// <summary>「上一首」在播放超过该时长后改为回到开头。</summary>
     private const long RestartThresholdMs = 3000;
 
+    /// <summary>本地代理地址的前缀，用于判断当前播放是否走代理，以便失败时回退。</summary>
+    private const string ProxyUrlPrefix = "http://127.0.0.1:";
+
     private readonly IAudioPlayer _player;
     private readonly IMediaResolver _resolver;
+    private readonly IAudioCache _cache;
+    private readonly LocalMediaProxy _proxy;
     private readonly List<Track> _queue = [];
     private readonly List<Track> _recent = [];
     private readonly Random _random = new();
     private int _currentIndex = -1;
     private bool _disposed;
 
+    /// <summary>当前解析/缓冲请求；切歌时取消上一个，避免旧结果覆盖新曲目。</summary>
+    private CancellationTokenSource? _resolveCts;
+
+    /// <summary>当前交给播放引擎的地址，用于代理失败时判断是否需要回退。</summary>
+    private string? _currentSource;
+
     /// <summary>首页「最近播放」最多保留的曲目数。</summary>
     private const int MaxRecent = 12;
 
-    public PlaybackService(IAudioPlayer player, IMediaResolver resolver)
+    public PlaybackService(
+        IAudioPlayer player,
+        IMediaResolver resolver,
+        IAudioCache cache,
+        LocalMediaProxy proxy)
     {
         _player = player;
         _resolver = resolver;
+        _cache = cache;
+        _proxy = proxy;
 
         _player.PlaybackEnded += OnPlaybackEnded;
         _player.PlaybackFailed += OnPlaybackFailed;
@@ -63,6 +82,12 @@ public sealed class PlaybackService : IDisposable
 
     /// <summary>最近一次播放错误，供界面提示。</summary>
     public string? LastError { get; private set; }
+
+    /// <summary>解析取流地址期间为 true（FTP/SMB/WebDAV 需要先下载或建立代理连接）。</summary>
+    public bool IsBuffering { get; private set; }
+
+    /// <summary>缓冲进度 0..1；走本地代理时立即为 1。</summary>
+    public double BufferProgress { get; private set; }
 
     public int Volume
     {
@@ -179,6 +204,8 @@ public sealed class PlaybackService : IDisposable
         }
 
         _disposed = true;
+        _resolveCts?.Cancel();
+        _resolveCts = null;
         _player.PlaybackEnded -= OnPlaybackEnded;
         _player.PlaybackFailed -= OnPlaybackFailed;
         _player.PositionChanged -= OnPositionChanged;
@@ -195,20 +222,79 @@ public sealed class PlaybackService : IDisposable
             return;
         }
 
+        // 快速连点切歌时取消上一次缓冲，避免旧曲目的结果覆盖新曲目。
+        _resolveCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _resolveCts = cts;
+
+        IsBuffering = true;
+        BufferProgress = 0;
+        RaiseChanged();
+
+        // 只有仍是当前请求时才把进度写回界面。
+        var progress = new Progress<double>(value =>
+        {
+            if (ReferenceEquals(_resolveCts, cts))
+            {
+                BufferProgress = value;
+                RaiseChanged();
+            }
+        });
+
+        string? source = null;
         try
         {
-            var source = await _resolver.ResolveAsync(track).ConfigureAwait(true);
-            _player.Load(source);
-            _player.Play();
-            LastError = null;
-            RecordRecent(track);
+            source = await _resolver
+                .ResolveAsync(track, progress, cts.Token)
+                .ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 已被后续的切歌请求取代，不视为错误。
+            return;
         }
         catch (Exception ex)
         {
             LastError = ex.Message;
         }
 
+        // 解析期间又切了歌：丢弃本次结果。
+        if (!ReferenceEquals(_resolveCts, cts))
+        {
+            return;
+        }
+
+        IsBuffering = false;
+        BufferProgress = source is null ? 0 : 1;
+
+        if (source is not null)
+        {
+            _currentSource = source;
+            _player.Load(source);
+            _player.Play();
+            LastError = null;
+            RecordRecent(track);
+
+            // 提前把队列下一首拉进缓存，切下一首时无需等待下载。
+            PrefetchNext();
+        }
+
         RaiseChanged();
+    }
+
+    /// <summary>预取队列中的下一首：仅文件协议需要先下载，HTTP 直连无需处理。</summary>
+    private void PrefetchNext()
+    {
+        if (IsShuffleEnabled || _currentIndex < 0 || _currentIndex + 1 >= _queue.Count)
+        {
+            return;
+        }
+
+        if (_queue[_currentIndex + 1] is
+            { SourceType: MusicSourceType.Ftp or MusicSourceType.Smb or MusicSourceType.WebDav } next)
+        {
+            _cache.DownloadInBackground(next);
+        }
     }
 
     /// <summary>把成功开播的曲目记到最近播放，去重后置顶并限制条数。</summary>
@@ -281,6 +367,20 @@ public sealed class PlaybackService : IDisposable
     {
         LastError = message;
         RaiseChanged();
+
+        // 走本地代理播放失败（个别平台/协议组合不支持），关掉代理并按整文件下载重试一次。
+        if (_proxy.Disabled
+            || _currentSource is null
+            || !_currentSource.StartsWith(ProxyUrlPrefix, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _proxy.Disabled = true;
+        _currentSource = null;
+
+        // 回调来自 libvlc 内部线程，切回 UI 线程重试。
+        Dispatcher.UIThread.Post(() => _ = PlayCurrentAsync());
     }
 
     private void OnPositionChanged(object? sender, long positionMs) => RaiseChanged();

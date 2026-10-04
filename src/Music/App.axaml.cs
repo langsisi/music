@@ -68,6 +68,9 @@ public partial class App : Application
         {
             var sync = AppHost.Services.GetRequiredService<LibrarySyncService>();
             await sync.SyncMissingSourcesAsync().ConfigureAwait(false);
+
+            // 索引就绪后在后台慢慢补齐缺的封面，不阻塞界面，也不用手动同步。
+            sync.StartBackgroundCoverPrefetch();
         }
         catch (Exception)
         {

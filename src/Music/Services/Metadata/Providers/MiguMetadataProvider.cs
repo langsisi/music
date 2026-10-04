@@ -61,7 +61,8 @@ public sealed class MiguMetadataProvider : IMetadataProvider
                     GetString(item, "singerName"),
                     GetString(item, "albumName"),
                     string.IsNullOrEmpty(cover) ? null : cover,
-                    HasLyrics: true));
+                    HasLyrics: true,
+                    Year: GetYear(item)));
             }
         }
         catch (JsonException)
@@ -108,4 +109,11 @@ public sealed class MiguMetadataProvider : IMetadataProvider
         => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? string.Empty
             : string.Empty;
+
+    /// <summary>咪咕搜索结果的发行时间字段名不固定，逐个尝试；都没有则返回 0。</summary>
+    private static int GetYear(JsonElement item)
+    {
+        var year = MetadataYear.FromElement(item, "releaseDate");
+        return year > 0 ? year : MetadataYear.FromElement(item, "publishDate");
+    }
 }

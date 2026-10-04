@@ -118,6 +118,13 @@ public partial class PlayerViewModel : ViewModelBase
 
     public bool IsPlaying => _playback.IsPlaying;
 
+    /// <summary>正在解析取流地址（网络音源首次播放需下载或建立代理连接）。</summary>
+    public bool IsBuffering => _playback.IsBuffering;
+
+    public string BufferText => _playback.IsBuffering
+        ? $"正在缓冲… {_playback.BufferProgress * 100:0}%"
+        : string.Empty;
+
     public Geometry PlayPauseIcon => IsPlaying ? AppIcons.Pause : AppIcons.Play;
 
     public double PositionSeconds
@@ -611,8 +618,7 @@ public partial class PlayerViewModel : ViewModelBase
             }
 
             MetadataSearchStatusText = $"找到 {SearchResults.Count} 个结果，点选一条后应用。";
-            SelectedSearchResult = SearchResults[0];
-            SelectedSearchResult.IsSelected = true;
+            SelectSearchResult(SearchResults[0]);
 
             _ = LoadThumbnailsAsync(provider.Id);
         }
@@ -635,6 +641,28 @@ public partial class PlayerViewModel : ViewModelBase
         }
 
         SelectedSearchResult = result;
+
+        // 选中候选后把它的元数据填进编辑区，点「应用所选」时才会带上这些值写回音源。
+        // 年份数据源不一定提供（Year 为 0），此时保留用户自己填的值不变。
+        if (!string.IsNullOrWhiteSpace(result.Candidate.Title))
+        {
+            SearchTitle = result.Candidate.Title;
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.Candidate.Artist))
+        {
+            SearchArtist = result.Candidate.Artist;
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.Candidate.Album))
+        {
+            SearchAlbum = result.Candidate.Album;
+        }
+
+        if (result.Candidate.Year > 0)
+        {
+            SearchYear = result.Candidate.Year.ToString();
+        }
     }
 
     /// <summary>应用所选结果：下载封面/歌词到本地，并保存编辑过的元数据。</summary>
@@ -653,11 +681,27 @@ public partial class PlayerViewModel : ViewModelBase
 
         try
         {
+            // 写回远端要整文件往返，把阶段进度直接显示在状态栏，避免看起来像卡死。
+            var progress = new Progress<string>(text => MetadataSearchStatusText = text);
+
+            // 元数据随候选一起交给 ApplyAsync：封面、歌词、元信息在一次写回里全部落到音源上。
             var outcome = await _scraper
-                .ApplyAsync(track, provider.Id, result.Candidate)
+                .ApplyAsync(
+                    track,
+                    provider.Id,
+                    result.Candidate,
+                    SearchTitle,
+                    SearchArtist,
+                    SearchAlbum,
+                    SearchYear,
+                    progress)
                 .ConfigureAwait(true);
 
-            await SaveMetadataCoreAsync(track).ConfigureAwait(true);
+            if (_playback.CurrentTrack?.Id == track.Id)
+            {
+                OnPropertyChanged(nameof(Title));
+                OnPropertyChanged(nameof(Artist));
+            }
 
             if (outcome.CoverUpdated)
             {
@@ -677,7 +721,7 @@ public partial class PlayerViewModel : ViewModelBase
         }
     }
 
-    /// <summary>只保存当前编辑的元数据（不改动音乐文件）。</summary>
+    /// <summary>保存当前编辑的元数据：落库并写回音源文件（Navidrome / 在线曲目无实体文件，自动跳过）。</summary>
     [RelayCommand]
     private async Task SaveSearchMetadata()
     {
@@ -688,8 +732,16 @@ public partial class PlayerViewModel : ViewModelBase
 
         try
         {
-            await SaveMetadataCoreAsync(track).ConfigureAwait(true);
-            MetadataSearchStatusText = "已保存到曲库。";
+            var writeBack = await SaveMetadataCoreAsync(track).ConfigureAwait(true);
+
+            MetadataSearchStatusText = writeBack.Status switch
+            {
+                WriteBackStatus.Succeeded => "已保存并写回音源。",
+                WriteBackStatus.Failed => $"已保存到曲库，写回音源失败：{writeBack.Message}",
+                _ => writeBack.Message.Length > 0
+                    ? $"已保存到曲库，未写回音源：{writeBack.Message}"
+                    : "已保存到曲库。",
+            };
         }
         catch (Exception ex)
         {
@@ -697,10 +749,12 @@ public partial class PlayerViewModel : ViewModelBase
         }
     }
 
-    private async Task SaveMetadataCoreAsync(Track track)
+    private async Task<WriteBackResult> SaveMetadataCoreAsync(Track track)
     {
-        await _scraper
-            .SaveMetadataAsync(track, SearchTitle, SearchArtist, SearchAlbum, SearchYear)
+        var progress = new Progress<string>(text => MetadataSearchStatusText = text);
+
+        var writeBack = await _scraper
+            .SaveMetadataAsync(track, SearchTitle, SearchArtist, SearchAlbum, SearchYear, progress)
             .ConfigureAwait(true);
 
         if (_playback.CurrentTrack?.Id == track.Id)
@@ -708,6 +762,8 @@ public partial class PlayerViewModel : ViewModelBase
             OnPropertyChanged(nameof(Title));
             OnPropertyChanged(nameof(Artist));
         }
+
+        return writeBack;
     }
 
     private async Task LoadPlaylistsAsync()
@@ -997,6 +1053,8 @@ public partial class PlayerViewModel : ViewModelBase
         OnPropertyChanged(nameof(CoverPath));
         OnPropertyChanged(nameof(HasTrack));
         OnPropertyChanged(nameof(IsPlaying));
+        OnPropertyChanged(nameof(IsBuffering));
+        OnPropertyChanged(nameof(BufferText));
         OnPropertyChanged(nameof(PlayPauseIcon));
         OnPropertyChanged(nameof(PositionSeconds));
         OnPropertyChanged(nameof(DurationSeconds));

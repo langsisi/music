@@ -12,7 +12,7 @@ namespace Music.Services.Sources;
 /// <summary>
 /// 文件协议音源（FTP / SMB / WebDAV）：递归列出远端目录，把音频文件登记为曲目。
 /// 这类协议没有元数据接口，标题取自文件名、专辑取自所在目录；
-/// 播放时先整文件下载到缓存（见 <c>SqliteAudioCache</c>）。
+/// 同步时读文件头部预取封面，播放时由本地 HTTP 代理边下边播并后台落盘（见 <c>CachedMediaResolver</c>）。
 /// </summary>
 public sealed class RemoteFileMusicSource : IMusicSource, IConnectionTestableMusicSource
 {

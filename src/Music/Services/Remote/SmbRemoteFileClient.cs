@@ -56,14 +56,86 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
         var store = client.TreeConnect(_config.ShareName, out status);
         if (store is null || status != NTStatus.STATUS_SUCCESS)
         {
+            // 共享名写错时，把服务器上真实存在的共享列出来，省得用户猜。
+            var available = TryListShares(client);
+
             client.Logoff();
             client.Disconnect();
-            throw new IOException($"无法打开共享「{_config.ShareName}」：{Describe(status)}");
+
+            var hint = available.Count > 0
+                ? $"该服务器上的共享有：{string.Join("、", available)}。"
+                : "请在服务器的共享设置里确认共享名（共享名不等于文件夹名）。";
+
+            throw new IOException($"无法打开共享「{_config.ShareName}」：{Describe(status)}。{hint}");
+        }
+
+        // 共享能打开不代表起始目录存在，先在连接阶段校验一次，
+        // 避免「测试连接通过、同步却 0 首」的困惑。
+        var rootPath = ToSmbPath(_config.RootPath ?? "/");
+        var rootStatus = OpenDirectory(store, rootPath);
+        if (rootStatus != NTStatus.STATUS_SUCCESS)
+        {
+            store.Disconnect();
+            client.Logoff();
+            client.Disconnect();
+            throw new IOException(
+                $"已连接到共享「{_config.ShareName}」，但起始目录「{_config.RootPath}」打不开：{Describe(rootStatus)}。");
         }
 
         _client = client;
         _store = store;
     }, cancellationToken);
+
+    /// <summary>打开一个目录做探活，成功则立即关闭。用于校验起始目录是否可访问。</summary>
+    private static NTStatus OpenDirectory(ISMBFileStore store, string path)
+    {
+        var status = store.CreateFile(
+            out var handle,
+            out _,
+            path,
+            AccessMask.GENERIC_READ,
+            SmbFileAttributes.Directory,
+            ShareAccess.Read | ShareAccess.Write,
+            CreateDisposition.FILE_OPEN,
+            CreateOptions.FILE_DIRECTORY_FILE,
+            null);
+
+        if (status == NTStatus.STATUS_SUCCESS)
+        {
+            store.CloseFile(handle);
+        }
+
+        return status;
+    }
+
+    /// <summary>查询已打开句柄的文件大小；失败返回 0，调用方据此退化成不报中间进度。</summary>
+    private static long GetFileSize(ISMBFileStore store, object handle)
+    {
+        var status = store.GetFileInformation(
+            out var information,
+            handle,
+            FileInformationClass.FileStandardInformation);
+
+        return status == NTStatus.STATUS_SUCCESS && information is FileStandardInformation standard
+            ? standard.EndOfFile
+            : 0;
+    }
+
+    /// <summary>尽力枚举服务器共享名；失败就返回空列表，不影响主流程的报错。</summary>
+    private static List<string> TryListShares(SMB2Client client)
+    {
+        try
+        {
+            var shares = client.ListShares(out var status);
+            return status == NTStatus.STATUS_SUCCESS && shares is not null
+                ? shares
+                : [];
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
 
     public async Task<IReadOnlyList<RemoteEntry>> ListAsync(
         string rootPath,
@@ -74,7 +146,7 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
 
         var entries = new List<RemoteEntry>();
         await Task.Run(
-                () => ListRecursive(ToSmbPath(rootPath), entries, progress, cancellationToken),
+                () => ListRecursive(ToSmbPath(rootPath), entries, progress, cancellationToken, isRoot: true),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -110,6 +182,9 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
                 throw new IOException($"打开远端文件失败：{Describe(status)}");
             }
 
+            // 先取文件总大小，循环里才能回报 0~1 进度；取不到就退化成不报中间进度。
+            var totalSize = GetFileSize(store, handle);
+
             try
             {
                 var bufferSize = (int)Math.Min(store.MaxReadSize, MaxChunkSize);
@@ -137,6 +212,11 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
 
                     destination.Write(data, 0, data.Length);
                     offset += data.Length;
+
+                    if (totalSize > 0)
+                    {
+                        progress?.Report((double)offset / totalSize);
+                    }
                 }
             }
             finally
@@ -146,6 +226,21 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
         }, cancellationToken).ConfigureAwait(false);
 
         progress?.Report(1);
+    }
+
+    public async Task<Stream> OpenReadAsync(
+        string remotePath,
+        long offset,
+        long length,
+        CancellationToken cancellationToken)
+    {
+        await ConnectAsync(cancellationToken).ConfigureAwait(false);
+
+        // SMBLibrary 只有同步分块读取，包一层顺序 Stream 供代理边读边发。
+        return await Task.Run(
+                () => (Stream)new SmbReadStream(_store!, ToSmbPath(remotePath), offset),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task UploadAsync(
@@ -178,6 +273,9 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
                 throw new IOException($"创建远端文件失败：{Describe(status)}");
             }
 
+            // 上传源通常是本地文件流，长度已知；不可 seek 时不报中间进度。
+            var totalSize = content.CanSeek ? content.Length : 0;
+
             try
             {
                 var buffer = new byte[(int)Math.Min(store.MaxWriteSize, MaxChunkSize)];
@@ -201,6 +299,11 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
                     }
 
                     offset += read;
+
+                    if (totalSize > 0)
+                    {
+                        progress?.Report((double)offset / totalSize);
+                    }
                 }
             }
             finally
@@ -242,7 +345,8 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
         string directory,
         List<RemoteEntry> entries,
         IProgress<ScanProgress>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isRoot = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -259,7 +363,13 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
             null);
         if (status != NTStatus.STATUS_SUCCESS)
         {
-            // 无权限或已删除的子目录直接跳过。
+            // 起始目录打不开必须报出来，否则用户只会看到「已导入 0 首曲目」而无从排查；
+            // 子目录可能因权限或竞态消失，跳过即可。
+            if (isRoot)
+            {
+                throw new IOException($"无法打开 SMB 目录「{directory}」：{Describe(status)}");
+            }
+
             return;
         }
 
@@ -277,7 +387,9 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
             store.CloseFile(handle);
         }
 
-        if (status != NTStatus.STATUS_SUCCESS)
+        // SMBLibrary 列完目录时可能返回 STATUS_NO_MORE_FILES（而非 STATUS_SUCCESS），
+        // 它同样表示列表已取全，不能当作失败丢弃结果。
+        if (status != NTStatus.STATUS_SUCCESS && status != NTStatus.STATUS_NO_MORE_FILES)
         {
             return;
         }
@@ -359,4 +471,130 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
         => string.IsNullOrEmpty(directory) ? name : directory + "\\" + name;
 
     private static string Describe(NTStatus status) => status.ToString();
+
+    /// <summary>
+    /// 把 SMBLibrary 的分块读取包装成只读顺序流：内部预取一块，按需交付给调用方。
+    /// 打开后即固定 offset，不支持 Seek，供本地 HTTP 代理按 Range 顺序发送。
+    /// </summary>
+    private sealed class SmbReadStream : Stream
+    {
+        private readonly ISMBFileStore _store;
+        private readonly object _handle;
+        private readonly int _chunkSize;
+
+        private byte[] _chunk = [];
+        private int _chunkOffset;
+        private int _chunkCount;
+        private long _position;
+        private bool _disposed;
+
+        public SmbReadStream(ISMBFileStore store, string path, long offset)
+        {
+            _store = store;
+            _chunkSize = (int)Math.Min(store.MaxReadSize, MaxChunkSize);
+
+            var status = store.CreateFile(
+                out var handle,
+                out _,
+                path,
+                AccessMask.GENERIC_READ,
+                SmbFileAttributes.Normal,
+                ShareAccess.Read,
+                CreateDisposition.FILE_OPEN,
+                CreateOptions.FILE_NON_DIRECTORY_FILE,
+                null);
+            if (status != NTStatus.STATUS_SUCCESS)
+            {
+                throw new IOException($"打开远端文件失败：{Describe(status)}");
+            }
+
+            _handle = handle;
+            _position = offset;
+        }
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => _position;
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (count <= 0)
+            {
+                return 0;
+            }
+
+            if (_chunkCount == 0 && !Fill())
+            {
+                return 0;
+            }
+
+            var take = Math.Min(count, _chunkCount);
+            Buffer.BlockCopy(_chunk, _chunkOffset, buffer, offset, take);
+
+            _chunkOffset += take;
+            _chunkCount -= take;
+            _position += take;
+            return take;
+        }
+
+        /// <summary>拉取下一块；已在文件末尾时返回 false。</summary>
+        private bool Fill()
+        {
+            var status = _store.ReadFile(out var data, _handle, _position, _chunkSize);
+            if (status == NTStatus.STATUS_END_OF_FILE || data.Length == 0)
+            {
+                return false;
+            }
+
+            if (status != NTStatus.STATUS_SUCCESS)
+            {
+                throw new IOException($"读取远端文件失败：{Describe(status)}");
+            }
+
+            _chunk = data;
+            _chunkOffset = 0;
+            _chunkCount = data.Length;
+            return true;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && !_disposed)
+            {
+                _disposed = true;
+                try
+                {
+                    _store.CloseFile(_handle);
+                }
+                catch (Exception)
+                {
+                    // 连接可能已被回收，关闭句柄失败可忽略。
+                }
+            }
+
+            base.Dispose(disposing);
+        }
+    }
 }

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Music.Models;
+using Music.Services.Metadata;
 
 namespace Music.Services.Sources;
 
@@ -128,7 +129,7 @@ public sealed class LocalMusicSource : IMusicSource
             track.Year = (int)tag.Year;
             track.TrackNumber = (int)tag.Track;
             track.DurationSeconds = file.Properties?.Duration.TotalSeconds ?? 0;
-            track.CoverPath = ExportCover(id, tag.Pictures);
+            track.CoverPath = AudioTagWriter.ExportCover(id, tag.Pictures);
         }
         catch (Exception)
         {
@@ -141,37 +142,5 @@ public sealed class LocalMusicSource : IMusicSource
         }
 
         return track;
-    }
-
-    /// <summary>把标签内嵌封面导出到封面目录，供列表与播放页复用。</summary>
-    private static string? ExportCover(string trackId, TagLib.IPicture[] pictures)
-    {
-        if (pictures.Length == 0)
-        {
-            return null;
-        }
-
-        var data = pictures[0].Data?.Data;
-        if (data is null || data.Length == 0)
-        {
-            return null;
-        }
-
-        var extension = pictures[0].MimeType?.Contains("png", StringComparison.OrdinalIgnoreCase) == true
-            ? ".png"
-            : ".jpg";
-
-        AppPaths.EnsureCreated();
-        var fullPath = Path.Combine(AppPaths.CoversDir, trackId.Replace(':', '_') + extension);
-
-        // 已经导出过且大小一致就不重复写盘。
-        var existing = new FileInfo(fullPath);
-        if (existing.Exists && existing.Length == data.Length)
-        {
-            return fullPath;
-        }
-
-        File.WriteAllBytes(fullPath, data);
-        return fullPath;
     }
 }

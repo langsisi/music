@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -36,6 +38,10 @@ public sealed class SqliteAudioCache : IAudioCache
     private readonly HttpClient _httpClient;
     private readonly IRemoteFileClientFactory _remoteClientFactory;
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    /// <summary>进行中的下载，按曲目 Id 合并：预取与「点击播放」可能同时发起同一首。</summary>
+    private readonly ConcurrentDictionary<string, DownloadJob> _jobs = new();
+
     private bool _initialized;
     private string? _pinnedKey;
 
@@ -112,14 +118,57 @@ public sealed class SqliteAudioCache : IAudioCache
         return path;
     }
 
-    public async Task<string> DownloadAsync(
+    public Task<string> DownloadAsync(
         Track track,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var job = _jobs.GetOrAdd(track.Id, _ => new DownloadJob());
+        Task<string> task;
 
-        var cached = await TryGetAsync(track, cancellationToken).ConfigureAwait(false);
+        lock (job)
+        {
+            if (progress is not null)
+            {
+                job.Listeners.Add(progress);
+            }
+
+            task = job.Task ??= RunDownloadAsync(track, job);
+        }
+
+        // 调用方取消只影响自己这一次等待，共享的下载仍在后台完成（随后即命中缓存）。
+        return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
+    }
+
+    /// <summary>执行真正的下载，并把进度转发给所有订阅者；结束后释放该曲目的下载位。</summary>
+    private async Task<string> RunDownloadAsync(Track track, DownloadJob job)
+    {
+        try
+        {
+            var relay = new Progress<double>(value =>
+            {
+                lock (job)
+                {
+                    foreach (var listener in job.Listeners)
+                    {
+                        listener.Report(value);
+                    }
+                }
+            });
+
+            return await DownloadCoreAsync(track, relay).ConfigureAwait(false);
+        }
+        finally
+        {
+            _jobs.TryRemove(track.Id, out _);
+        }
+    }
+
+    private async Task<string> DownloadCoreAsync(Track track, IProgress<double>? progress)
+    {
+        await InitializeAsync().ConfigureAwait(false);
+
+        var cached = await TryGetAsync(track).ConfigureAwait(false);
         if (cached is not null)
         {
             progress?.Report(1);
@@ -133,7 +182,9 @@ public sealed class SqliteAudioCache : IAudioCache
         Directory.CreateDirectory(folder);
 
         var tempPath = Path.Combine(folder, safeKey + ".tmp");
-        var contentType = await DownloadToFileAsync(track, tempPath, progress, cancellationToken)
+
+        // 共享下载不绑定任何调用方：某次播放被取消时，缓存仍会填好供下次使用。
+        var contentType = await DownloadToFileAsync(track, tempPath, progress, CancellationToken.None)
             .ConfigureAwait(false);
 
         var finalPath = Path.Combine(folder, safeKey + ResolveExtension(contentType, track.Path));
@@ -142,9 +193,9 @@ public sealed class SqliteAudioCache : IAudioCache
         File.Move(tempPath, finalPath, overwrite: true);
 
         var bytes = new FileInfo(finalPath).Length;
-        await UpsertAsync(track, finalPath, contentType, bytes, cancellationToken).ConfigureAwait(false);
+        await UpsertAsync(track, finalPath, contentType, bytes, CancellationToken.None).ConfigureAwait(false);
 
-        await EvictAsync(cancellationToken).ConfigureAwait(false);
+        await EvictAsync(CancellationToken.None).ConfigureAwait(false);
         return finalPath;
     }
 
@@ -400,6 +451,14 @@ public sealed class SqliteAudioCache : IAudioCache
         command.CommandText = "DELETE FROM Cache WHERE Key = $key";
         command.Parameters.AddWithValue("$key", key);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>同一曲目的下载任务与进度订阅者；并发请求合并到同一个任务上。</summary>
+    private sealed class DownloadJob
+    {
+        public List<IProgress<double>> Listeners { get; } = [];
+
+        public Task<string>? Task { get; set; }
     }
 
     /// <summary>曲目 Id 形如 <c>sourceId:hash</c>，冒号在 Windows 文件名中非法。</summary>

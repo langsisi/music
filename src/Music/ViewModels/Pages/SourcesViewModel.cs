@@ -556,8 +556,10 @@ public partial class SourcesViewModel : PageViewModel
                 ProgressValue = report.Percent;
             });
 
-            var count = await _sync.SyncAsync(config, progress);
-            StatusText = $"{config.DisplayName}：已导入 {count} 首曲目";
+            var result = await _sync.SyncAsync(config, progress);
+            StatusText = result.CoverCount > 0
+                ? $"{config.DisplayName}：已导入 {result.TrackCount} 首曲目，封面 {result.CoverCount} 张"
+                : $"{config.DisplayName}：已导入 {result.TrackCount} 首曲目（未取到封面）";
             ProgressValue = 100;
         }
         catch (Exception ex)

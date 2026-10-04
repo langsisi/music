@@ -32,13 +32,14 @@ public sealed record WriteBackResult(WriteBackStatus Status, string Message)
 }
 
 /// <summary>
-/// 把刮削得到的封面 / 歌词写回音源本身：
+/// 把刮削得到或用户编辑的封面 / 歌词 / 元数据（标题、歌手、专辑）写回音源本身：
 /// <list type="bullet">
 /// <item>本地：直接改写音频标签，并在同目录写一个同名 <c>.lrc</c>。</item>
 /// <item>FTP/SMB/WebDAV：下载原文件到缓存临时文件 → 改写标签 → 覆盖上传，同时上传同名 <c>.lrc</c>。</item>
 /// <item>Navidrome（接口不支持上传）与在线曲目（无实体文件）：跳过。</item>
 /// </list>
-/// 是否启用由 <see cref="AppSettings.ScrapeWriteBack"/> 控制；全程不抛异常，超时降级为失败文案。
+/// 是否启用由 <see cref="AppSettings.ScrapeWriteBack"/> 控制（默认开启）；
+/// 全程不抛异常，超时降级为失败文案。
 /// </summary>
 public sealed class SourceWriteBackService
 {
@@ -54,18 +55,30 @@ public sealed class SourceWriteBackService
         _remoteClientFactory = remoteClientFactory;
     }
 
+    /// <summary>
+    /// 写回封面 / 歌词 / 元数据到音源。<paramref name="title"/> 等为 null 或空时保持文件里的原值不动。
+    /// <paramref name="progress"/> 用于回报阶段文案（远端是整文件往返，耗时较长，需要让用户看到在动）。
+    /// </summary>
     public async Task<WriteBackResult> WriteBackAsync(
         Track track,
         byte[]? coverBytes,
         string? lyrics,
+        string? title = null,
+        string? artist = null,
+        string? album = null,
+        IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
         if (!_settings.Current.ScrapeWriteBack)
         {
-            return WriteBackResult.Skipped;
+            return new WriteBackResult(WriteBackStatus.Skipped, "设置页「刮削时写回音源」已关闭。");
         }
 
-        if (coverBytes is null && string.IsNullOrWhiteSpace(lyrics))
+        if (coverBytes is null
+            && string.IsNullOrWhiteSpace(lyrics)
+            && string.IsNullOrWhiteSpace(title)
+            && string.IsNullOrWhiteSpace(artist)
+            && string.IsNullOrWhiteSpace(album))
         {
             return WriteBackResult.Skipped;
         }
@@ -77,11 +90,14 @@ public sealed class SourceWriteBackService
 
             return track.SourceType switch
             {
-                MusicSourceType.Local => await WriteLocalAsync(track, coverBytes, lyrics, timeout.Token)
+                MusicSourceType.Local => await WriteLocalAsync(
+                        track, coverBytes, lyrics, title, artist, album, progress, timeout.Token)
                     .ConfigureAwait(false),
 
                 MusicSourceType.Ftp or MusicSourceType.Smb or MusicSourceType.WebDav =>
-                    await WriteRemoteAsync(track, coverBytes, lyrics, timeout.Token).ConfigureAwait(false),
+                    await WriteRemoteAsync(
+                            track, coverBytes, lyrics, title, artist, album, progress, timeout.Token)
+                        .ConfigureAwait(false),
 
                 _ => WriteBackResult.Skipped,
             };
@@ -96,6 +112,10 @@ public sealed class SourceWriteBackService
         Track track,
         byte[]? coverBytes,
         string? lyrics,
+        string? title,
+        string? artist,
+        string? album,
+        IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
         if (!File.Exists(track.Path))
@@ -103,9 +123,11 @@ public sealed class SourceWriteBackService
             return WriteBackResult.Fail("找不到本地音频文件。");
         }
 
+        progress?.Report("正在写入本地文件标签…");
+
         var path = track.Path;
         var tagOk = await Task.Run(
-                () => AudioTagWriter.Write(path, coverBytes, lyrics),
+                () => AudioTagWriter.Write(path, coverBytes, lyrics, title, artist, album, track.Year),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -122,6 +144,10 @@ public sealed class SourceWriteBackService
         Track track,
         byte[]? coverBytes,
         string? lyrics,
+        string? title,
+        string? artist,
+        string? album,
+        IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
         var config = _settings.Current.Sources
@@ -145,15 +171,24 @@ public sealed class SourceWriteBackService
         {
             await using var client = _remoteClientFactory.Create(config);
 
+            // 远端写回是「整文件下载 → 改标签 → 覆盖上传」，文件越大越慢，
+            // 这里按阶段回报进度，避免界面一直停在「正在应用…」像是卡死。
+            const string downloadStage = "正在下载原文件";
+            progress?.Report($"{downloadStage}… 0%");
             await using (var destination = File.Create(tempPath))
             {
                 await client
-                    .DownloadAsync(remotePath, destination, null, cancellationToken)
+                    .DownloadAsync(
+                        remotePath,
+                        destination,
+                        StageProgress(progress, downloadStage, 0, 50),
+                        cancellationToken)
                     .ConfigureAwait(false);
             }
 
+            progress?.Report("正在写入标签…");
             var tagOk = await Task.Run(
-                    () => AudioTagWriter.Write(tempPath, coverBytes, lyrics),
+                    () => AudioTagWriter.Write(tempPath, coverBytes, lyrics, title, artist, album, track.Year),
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -162,15 +197,22 @@ public sealed class SourceWriteBackService
                 return WriteBackResult.Fail("写入音频标签失败。");
             }
 
+            const string uploadStage = "正在上传到音源";
+            progress?.Report($"{uploadStage}… 50%");
             await using (var audio = File.OpenRead(tempPath))
             {
                 await client
-                    .UploadAsync(remotePath, audio, null, cancellationToken)
+                    .UploadAsync(
+                        remotePath,
+                        audio,
+                        StageProgress(progress, uploadStage, 50, 100),
+                        cancellationToken)
                     .ConfigureAwait(false);
             }
 
             if (!string.IsNullOrWhiteSpace(lyrics))
             {
+                progress?.Report("正在上传歌词…");
                 var lrcRemote = Path.ChangeExtension(remotePath, ".lrc");
                 using var lrcStream = new MemoryStream(Encoding.UTF8.GetBytes(lyrics));
                 await client
@@ -178,6 +220,7 @@ public sealed class SourceWriteBackService
                     .ConfigureAwait(false);
             }
 
+            progress?.Report("写回完成。");
             return WriteBackResult.Ok();
         }
         finally
@@ -185,6 +228,17 @@ public sealed class SourceWriteBackService
             TryDelete(tempPath);
         }
     }
+
+    /// <summary>把 0~1 的字节进度换算成整体百分比文案，例如「正在下载原文件… 42%」。</summary>
+    private static IProgress<double>? StageProgress(
+        IProgress<string>? progress,
+        string stage,
+        int fromPercent,
+        int toPercent)
+        => progress is null
+            ? null
+            : new Progress<double>(value => progress.Report(
+                $"{stage}… {fromPercent + (toPercent - fromPercent) * value:0}%"));
 
     private static async Task<bool> TryWriteSidecarLyricsAsync(
         string lrcPath,

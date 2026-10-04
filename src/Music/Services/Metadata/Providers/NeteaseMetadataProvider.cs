@@ -57,14 +57,16 @@ public sealed class NeteaseMetadataProvider : IMetadataProvider
                 var artist = FirstArtist(song);
                 string? cover = null;
                 var album = string.Empty;
+                var year = 0;
 
                 if (song.TryGetProperty("album", out var albumNode) && albumNode.ValueKind == JsonValueKind.Object)
                 {
                     cover = GetString(albumNode, "picUrl");
                     album = GetString(albumNode, "name");
+                    year = MetadataYear.FromElement(albumNode, "publishTime");
                 }
 
-                results.Add(new MetadataCandidate(Id, id, name, artist, album, cover, HasLyrics: true));
+                results.Add(new MetadataCandidate(Id, id, name, artist, album, cover, HasLyrics: true, Year: year));
             }
         }
         catch (JsonException)

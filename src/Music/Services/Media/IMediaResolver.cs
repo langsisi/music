@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Music.Models;
@@ -10,5 +11,12 @@ namespace Music.Services.Media;
 /// </summary>
 public interface IMediaResolver
 {
-    Task<string> ResolveAsync(Track track, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// 解析出可播放的本地路径或 URL。
+    /// 需要下载时就绪前通过 <paramref name="progress"/> 上报 0..1 的进度，供界面显示缓冲状态。
+    /// </summary>
+    Task<string> ResolveAsync(
+        Track track,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default);
 }

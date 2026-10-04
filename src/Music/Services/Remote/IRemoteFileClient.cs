@@ -32,6 +32,16 @@ public interface IRemoteFileClient : IAsyncDisposable
         IProgress<double>? progress,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// 从 <paramref name="offset"/> 起顺序读取至多 <paramref name="length"/> 字节，返回可读的流。
+    /// 用于本地 HTTP 代理实现「边下边播」与拖动：每次调用独占一条连接，调用方负责释放流。
+    /// </summary>
+    Task<Stream> OpenReadAsync(
+        string remotePath,
+        long offset,
+        long length,
+        CancellationToken cancellationToken);
+
     /// <summary>把 <paramref name="content"/> 上传到远端路径；目录不存在时自动创建。</summary>
     Task UploadAsync(
         string remotePath,

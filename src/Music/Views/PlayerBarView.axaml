@@ -94,6 +94,12 @@
                         </Button>
                     </StackPanel>
 
+                    <!-- 网络音源首次播放需先取流：仅在缓冲时占位，缓冲结束自动收起。 -->
+                    <TextBlock Text="{Binding Player.BufferText}"
+                               IsVisible="{Binding Player.IsBuffering}"
+                               FontSize="11" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource TextTertiaryBrush}" />
+
                     <Grid ColumnDefinitions="44,*,44" VerticalAlignment="Center">
                         <TextBlock Grid.Column="0" Text="{Binding Player.PositionText}"
                                    FontSize="11" VerticalAlignment="Center"

@@ -67,7 +67,8 @@ public sealed class QqMetadataProvider : IMetadataProvider
                     FirstSinger(item),
                     GetString(item, "albumname"),
                     cover,
-                    HasLyrics: true));
+                    HasLyrics: true,
+                    Year: MetadataYear.FromElement(item, "pubtime")));
             }
         }
         catch (JsonException)

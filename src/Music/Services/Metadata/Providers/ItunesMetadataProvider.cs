@@ -67,7 +67,8 @@ public sealed class ItunesMetadataProvider : IMetadataProvider
                     GetString(item, "artistName"),
                     GetString(item, "collectionName"),
                     cover,
-                    HasLyrics: false));
+                    HasLyrics: false,
+                    Year: MetadataYear.FromDate(GetString(item, "releaseDate"))));
             }
         }
         catch (JsonException)

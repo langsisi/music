@@ -63,7 +63,8 @@ public sealed class KugouMetadataProvider : IMetadataProvider
                     GetString(item, "singername"),
                     GetString(item, "albumname"),
                     CoverUrl: null, // 封面需按 hash 二次请求，见 GetCoverAsync。
-                    HasLyrics: true));
+                    HasLyrics: true,
+                    Year: GetYear(item)));
             }
         }
         catch (JsonException)
@@ -177,4 +178,11 @@ public sealed class KugouMetadataProvider : IMetadataProvider
         => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? string.Empty
             : string.Empty;
+
+    /// <summary>酷狗搜索结果的发行时间字段名不固定，逐个尝试；都没有则返回 0。</summary>
+    private static int GetYear(JsonElement item)
+    {
+        var year = MetadataYear.FromElement(item, "publish_time");
+        return year > 0 ? year : MetadataYear.FromElement(item, "publishTime");
+    }
 }

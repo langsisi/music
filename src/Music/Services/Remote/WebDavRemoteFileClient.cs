@@ -144,6 +144,33 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
         progress?.Report(1);
     }
 
+    public async Task<Stream> OpenReadAsync(
+        string remotePath,
+        long offset,
+        long length,
+        CancellationToken cancellationToken)
+    {
+        var uri = BuildFileUri(remotePath);
+        using var request = NewRequest(HttpMethod.Get, uri);
+
+        // HTTP Range 天然支持任意区间；服务端不支持时会退化成 200 整文件，同样能顺序读完。
+        var end = length > 0 ? offset + length - 1 : (long?)null;
+        request.Headers.Range = new RangeHeaderValue(offset, end);
+
+        var response = await _httpClient
+            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            response.Dispose();
+            throw new IOException($"读取远端文件失败：{(int)response.StatusCode} {response.ReasonPhrase}");
+        }
+
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return new ResponseOwnedStream(stream, response);
+    }
+
     public async Task UploadAsync(
         string remotePath,
         Stream content,
@@ -154,8 +181,22 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
 
         var uri = BuildFileUri(remotePath);
         using var request = NewRequest(HttpMethod.Put, uri);
-        request.Content = new StreamContent(content);
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+        // HttpClient 不提供上传进度，包一层按读取字节回报；长度已知时显式带上 Content-Length，
+        // 避免包装后退化成 chunked 传输（部分 WebDAV 服务端不接受）。
+        var total = content.CanSeek ? content.Length : 0;
+        var upload = progress is not null && total > 0
+            ? (Stream)new ProgressReadStream(content, progress, total)
+            : content;
+
+        var body = new StreamContent(upload);
+        body.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        if (total > 0)
+        {
+            body.Headers.ContentLength = total;
+        }
+
+        request.Content = body;
 
         using var response = await _httpClient
             .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
@@ -212,7 +253,11 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
             var isDirectory = element.Descendants()
                 .Any(node => string.Equals(node.Name.LocalName, "collection", StringComparison.Ordinal));
 
-            var sizeText = FindChild(element, "getcontentlength")?.Value;
+            // getcontentlength 在 response/propstat/prop 之下，不是 response 的直接子元素，
+            // 用 FindChild 会取不到（导致曲目体积恒为 0），必须按后代查找。
+            var sizeText = element.Descendants()
+                .FirstOrDefault(node => string.Equals(node.Name.LocalName, "getcontentlength", StringComparison.Ordinal))
+                ?.Value;
             _ = long.TryParse(sizeText, out var size);
 
             results.Add((itemUri, isDirectory, size));
@@ -346,5 +391,154 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
         }
 
         return new Uri(baseUrl + "/");
+    }
+
+    /// <summary>把响应体流与 <see cref="HttpResponseMessage"/> 绑定：释放流时一并释放响应，避免连接泄漏。</summary>
+    private sealed class ResponseOwnedStream : Stream
+    {
+        private readonly Stream _inner;
+        private readonly IDisposable _owner;
+
+        public ResponseOwnedStream(Stream inner, IDisposable owner)
+        {
+            _inner = inner;
+            _owner = owner;
+        }
+
+        public override bool CanRead => _inner.CanRead;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+
+        public override int Read(Span<byte> buffer) => _inner.Read(buffer);
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => _inner.ReadAsync(buffer, offset, count, cancellationToken);
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => _inner.ReadAsync(buffer, cancellationToken);
+
+        public override void Flush() => _inner.Flush();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+                _owner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await _inner.DisposeAsync().ConfigureAwait(false);
+            _owner.Dispose();
+            GC.SuppressFinalize(this);
+        }
+    }
+
+    /// <summary>
+    /// 只读包装流：每次读取后按「已读字节 / 总字节」回报 0~1 进度。
+    /// 用于 WebDAV 上传——HttpClient 自身不暴露上传进度，只能从请求体读取侧观测。
+    /// </summary>
+    private sealed class ProgressReadStream : Stream
+    {
+        private readonly Stream _inner;
+        private readonly IProgress<double> _progress;
+        private readonly long _total;
+        private long _read;
+
+        public ProgressReadStream(Stream inner, IProgress<double> progress, long total)
+        {
+            _inner = inner;
+            _progress = progress;
+            _total = total;
+        }
+
+        public override bool CanRead => _inner.CanRead;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => _inner.Length;
+
+        public override long Position
+        {
+            get => _read;
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var read = _inner.Read(buffer, offset, count);
+            Report(read);
+            return read;
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            var read = _inner.Read(buffer);
+            Report(read);
+            return read;
+        }
+
+        public override async Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+        {
+            var read = await _inner.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+            Report(read);
+            return read;
+        }
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            var read = await _inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            Report(read);
+            return read;
+        }
+
+        private void Report(int read)
+        {
+            if (read <= 0 || _total <= 0)
+            {
+                return;
+            }
+
+            _read += read;
+            _progress.Report((double)_read / _total);
+        }
+
+        public override void Flush() => _inner.Flush();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

@@ -76,6 +76,21 @@ public sealed class FtpRemoteFileClient : IRemoteFileClient
             .ConfigureAwait(false);
     }
 
+    public async Task<Stream> OpenReadAsync(
+        string remotePath,
+        long offset,
+        long length,
+        CancellationToken cancellationToken)
+    {
+        await ConnectAsync(cancellationToken).ConfigureAwait(false);
+
+        // restartPosition 即 FTP 的 REST 命令，直接从 offset 处开始取数据；length 由调用方截断。
+        // fileLen 传 -1：不让它为了拿文件大小再跑一次 SIZE，读取本身不需要该值。
+        return await _client
+            .OpenRead(remotePath, FtpDataType.Binary, offset, fileLen: -1, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task UploadAsync(
         string remotePath,
         Stream content,

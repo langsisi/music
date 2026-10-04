@@ -48,6 +48,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromMinutes(5) });
         services.AddSingleton<IAudioCache, SqliteAudioCache>();
         services.AddSingleton<IAudioPlayer, VlcAudioPlayer>();
+        // 本地 HTTP 代理：FTP/SMB/WebDAV 曲目边下边播（不可用时自动回退到整文件下载）。
+        services.AddSingleton<LocalMediaProxy>();
         services.AddSingleton<IMediaResolver, CachedMediaResolver>();
         services.AddSingleton<PlaybackService>();
 
@@ -69,6 +71,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMetadataProvider, MiguMetadataProvider>();
         services.AddSingleton<IMetadataProvider, ItunesMetadataProvider>();
         services.AddSingleton<SourceWriteBackService>();
+        services.AddSingleton<RemoteMetadataEnricher>();
         services.AddSingleton<MetadataScrapeService>();
 
         // 在线升级

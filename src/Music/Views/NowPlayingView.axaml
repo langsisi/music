@@ -69,6 +69,11 @@
                 <TextBlock Text="{Binding Player.Artist}" FontSize="14"
                            TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource TextSecondaryBrush}" />
+                <!-- 网络音源首次播放的缓冲进度。 -->
+                <TextBlock Text="{Binding Player.BufferText}"
+                           IsVisible="{Binding Player.IsBuffering}"
+                           FontSize="12.5"
+                           Foreground="{DynamicResource TextTertiaryBrush}" />
             </StackPanel>
         </StackPanel>
 

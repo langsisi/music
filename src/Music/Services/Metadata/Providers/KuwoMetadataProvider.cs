@@ -64,7 +64,8 @@ public sealed partial class KuwoMetadataProvider : IMetadataProvider
                 Unescape(Field(item, "ARTIST")),
                 Unescape(Field(item, "ALBUM")),
                 cover,
-                HasLyrics: true));
+                HasLyrics: true,
+                Year: MetadataYear.FromDate(Field(item, "RELEASEDATE"))));
         }
 
         return results;
