@@ -181,7 +181,10 @@ public class MarqueeText : Control
     private void Update()
     {
         var available = _available;
-        var distance = _naturalWidth - available;
+
+        // 可见宽度是按布局推算出来的，可能比真实裁剪区略大；把行程放大 1/3 并额外留
+        // 一点余量，宁可多滚一点，也要保证文字尾部一定被带进可见区域。
+        var distance = (_naturalWidth - available) * 4.0 / 3.0 + available * 0.2;
 
         // 宽屏/紧凑两套布局共用同一个模板，隐藏的那一份不必滚动。
         if (!IsVisible || available <= 1 || distance <= 1)
