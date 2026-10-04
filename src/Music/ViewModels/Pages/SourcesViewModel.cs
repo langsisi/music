@@ -51,13 +51,13 @@ public partial class SourcesViewModel : PageViewModel
     public bool HasSources => Sources.Count > 0;
 
     [ObservableProperty]
-    public partial bool IsBusy { get; set; }
+    private bool _isBusy;
 
     [ObservableProperty]
-    public partial string StatusText { get; set; } = string.Empty;
+    private string _statusText = string.Empty;
 
     [ObservableProperty]
-    public partial double ProgressValue { get; set; }
+    private double _progressValue;
 
     /// <summary>选择文件夹并加入本地音源，随后立即扫描入库。</summary>
     [RelayCommand]
@@ -94,10 +94,10 @@ public partial class SourcesViewModel : PageViewModel
     // ---------------- 远程音源编辑（Navidrome / FTP 共用一套表单） ----------------
 
     [ObservableProperty]
-    public partial bool IsEditorOpen { get; set; }
+    private bool _isEditorOpen;
 
     [ObservableProperty]
-    public partial MusicSourceType EditorType { get; set; }
+    private MusicSourceType _editorType;
 
     partial void OnEditorTypeChanged(MusicSourceType value)
     {
@@ -116,28 +116,28 @@ public partial class SourcesViewModel : PageViewModel
     public string AddressPlaceholder => IsFtpEditor ? "ftp.example.com" : "https://music.example.com";
 
     [ObservableProperty]
-    public partial string EditorName { get; set; } = string.Empty;
+    private string _editorName = string.Empty;
 
     [ObservableProperty]
-    public partial string EditorAddress { get; set; } = string.Empty;
+    private string _editorAddress = string.Empty;
 
     [ObservableProperty]
-    public partial decimal? EditorPort { get; set; } = DefaultFtpPort;
+    private decimal? _editorPort = DefaultFtpPort;
 
     [ObservableProperty]
-    public partial string EditorUser { get; set; } = string.Empty;
+    private string _editorUser = string.Empty;
 
     [ObservableProperty]
-    public partial string EditorPassword { get; set; } = string.Empty;
+    private string _editorPassword = string.Empty;
 
     [ObservableProperty]
-    public partial string EditorRootPath { get; set; } = "/";
+    private string _editorRootPath = "/";
 
     [ObservableProperty]
-    public partial string EditorStatusText { get; set; } = string.Empty;
+    private string _editorStatusText = string.Empty;
 
     [ObservableProperty]
-    public partial bool IsTesting { get; set; }
+    private bool _isTesting;
 
     [RelayCommand]
     private void AddNavidrome() => OpenEditor(MusicSourceType.Navidrome, null);

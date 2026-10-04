@@ -26,6 +26,17 @@ public sealed record BroadcastState(
     public static readonly BroadcastState Idle = new("未在播放", string.Empty, string.Empty, 0, 0, false, [], -1);
 }
 
+/// <summary>SSE <c>track</c> 事件的负载（字段名由 camelCase 策略输出为小写）。</summary>
+internal sealed record TrackEventPayload(
+    string Title,
+    string Artist,
+    string Album,
+    double Duration,
+    IReadOnlyList<string> Lines);
+
+/// <summary>SSE <c>line</c> 事件的负载（字段名由 camelCase 策略输出为小写）。</summary>
+internal sealed record LineEventPayload(int Index, double Position, bool Playing);
+
 /// <summary>
 /// 内置歌词广播服务：直接绑定 Socket 的极简 HTTP 服务，
 /// <c>GET /</c> 返回滚动歌词网页，<c>GET /events</c> 用 SSE 推送当前行。
@@ -301,26 +312,18 @@ public sealed class LyricsBroadcastServer : IDisposable
 
     private static string BuildTrackEvent(BroadcastState state)
     {
-        var payload = JsonSerializer.Serialize(new
-        {
-            title = state.Title,
-            artist = state.Artist,
-            album = state.Album,
-            duration = state.DurationSeconds,
-            lines = state.Lines,
-        });
+        var payload = JsonSerializer.Serialize(
+            new TrackEventPayload(state.Title, state.Artist, state.Album, state.DurationSeconds, state.Lines),
+            BroadcastJsonContext.Default.TrackEventPayload);
 
         return $"event: track\ndata: {payload}\n\n";
     }
 
     private static string BuildLineEvent(BroadcastState state)
     {
-        var payload = JsonSerializer.Serialize(new
-        {
-            index = state.CurrentLineIndex,
-            position = Math.Round(state.PositionSeconds, 2),
-            playing = state.IsPlaying,
-        });
+        var payload = JsonSerializer.Serialize(
+            new LineEventPayload(state.CurrentLineIndex, Math.Round(state.PositionSeconds, 2), state.IsPlaying),
+            BroadcastJsonContext.Default.LineEventPayload);
 
         return $"event: line\ndata: {payload}\n\n";
     }

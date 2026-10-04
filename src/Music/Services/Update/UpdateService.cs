@@ -29,12 +29,6 @@ public sealed class UpdateService
     private readonly HttpClient _httpClient;
     private readonly IUpdateInstaller _installer;
 
-    /// <summary>清单里的键名通常是 camelCase，这里不区分大小写。</summary>
-    private static readonly JsonSerializerOptions ManifestOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
-
     /// <summary>
     /// 部分静态托管（例如 GitCode 的 raw 网关 raw.gitcode.com）会拒绝没有浏览器特征的请求，
     /// 直接返回 403 Forbidden。这里带上常见的 UA 与 Accept，保证升级检查能正常拿到清单。
@@ -109,8 +103,9 @@ public sealed class UpdateService
                 .ReadAsStreamAsync(cancellationToken)
                 .ConfigureAwait(false);
 
+            // 清单里的键名通常是 camelCase，大小写不敏感由 UpdateJsonContext 的源生成选项表达。
             manifest = await JsonSerializer
-                .DeserializeAsync<UpdateManifest>(stream, ManifestOptions, cancellationToken)
+                .DeserializeAsync(stream, UpdateJsonContext.Default.UpdateManifest, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (HttpRequestException ex)

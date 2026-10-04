@@ -34,8 +34,8 @@ public static class UpdateDefaults
                 return;
             }
 
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var config = JsonSerializer.Deserialize<UpdateConfig>(stream, options);
+            // 大小写不敏感由 UpdateJsonContext 的源生成选项表达。
+            var config = JsonSerializer.Deserialize(stream, UpdateJsonContext.Default.UpdateConfig);
             if (config is null)
             {
                 return;
@@ -50,13 +50,14 @@ public static class UpdateDefaults
             // 配置缺失或损坏时保持空配置：不检查更新，但不影响应用启动。
         }
     }
+}
 
-    private sealed class UpdateConfig
-    {
-        public string? FeedUrl { get; set; }
+/// <summary><c>update.config.json</c> 的结构；提升为 internal 以便源生成器访问。</summary>
+internal sealed class UpdateConfig
+{
+    public string? FeedUrl { get; set; }
 
-        public string? User { get; set; }
+    public string? User { get; set; }
 
-        public string? Token { get; set; }
-    }
+    public string? Token { get; set; }
 }

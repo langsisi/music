@@ -10,16 +10,9 @@ namespace Music.Services;
 /// <summary>把 <see cref="AppSettings"/> 以 JSON 持久化到 <see cref="AppPaths.SettingsFile"/>。</summary>
 public sealed class JsonSettingsStore : ISettingsStore
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        WriteIndented = true,
-
-        // 只持久化真正可写的状态。DisplayName / Summary / Type 这类计算属性是只读的，
-        // 而 System.Text.Json 不会把基类属性上的 [JsonIgnore] 继承给 override 声明，
-        // 因此必须在这里统一排除，否则它们会被写进设置文件。
-        IgnoreReadOnlyProperties = true,
-    };
-
+    // 序列化选项（WriteIndented / IgnoreReadOnlyProperties）由 SettingsJsonContext 的
+    // [JsonSourceGenerationOptions] 表达；只保留真正可写的状态，DisplayName / Summary / Type
+    // 这类只读计算属性不会被写进设置文件。
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public AppSettings Current { get; private set; } = new();
@@ -36,7 +29,7 @@ public sealed class JsonSettingsStore : ISettingsStore
 
             await using var stream = File.OpenRead(AppPaths.SettingsFile);
             var loaded = await JsonSerializer
-                .DeserializeAsync<AppSettings>(stream, SerializerOptions, cancellationToken)
+                .DeserializeAsync(stream, SettingsJsonContext.Default.AppSettings, cancellationToken)
                 .ConfigureAwait(false);
 
             if (loaded is not null)
@@ -67,7 +60,7 @@ public sealed class JsonSettingsStore : ISettingsStore
             await using (var stream = File.Create(tempFile))
             {
                 await JsonSerializer
-                    .SerializeAsync(stream, Current, SerializerOptions, cancellationToken)
+                    .SerializeAsync(stream, Current, SettingsJsonContext.Default.AppSettings, cancellationToken)
                     .ConfigureAwait(false);
             }
 

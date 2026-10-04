@@ -267,10 +267,10 @@ public partial class PlayerViewModel : ViewModelBase
 
     /// <summary>队列抽屉是否展开。</summary>
     [ObservableProperty]
-    public partial bool IsQueueOpen { get; set; }
+    private bool _isQueueOpen;
 
     [ObservableProperty]
-    public partial int CurrentQueueIndex { get; set; } = -1;
+    private int _currentQueueIndex = -1;
 
     /// <summary>队列内容签名，用于避免随播放进度每帧重建队列列表。</summary>
     private string _queueSignature = string.Empty;
@@ -282,24 +282,24 @@ public partial class PlayerViewModel : ViewModelBase
     public bool HasLyrics => LyricLines.Count > 0;
 
     [ObservableProperty]
-    public partial int CurrentLyricIndex { get; set; } = -1;
+    private int _currentLyricIndex = -1;
 
     // ---------------- 曲目操作弹层（三个点） ----------------
 
     /// <summary>底部操作弹层是否展开。</summary>
     [ObservableProperty]
-    public partial bool IsTrackActionsOpen { get; set; }
+    private bool _isTrackActionsOpen;
 
     /// <summary>弹层内切换到「添加到歌单」的歌单列表。</summary>
     [ObservableProperty]
-    public partial bool IsPlaylistPickerOpen { get; set; }
+    private bool _isPlaylistPickerOpen;
 
     /// <summary>弹层内的操作状态提示（下载进度等）。</summary>
     [ObservableProperty]
-    public partial string TrackActionStatusText { get; set; } = string.Empty;
+    private string _trackActionStatusText = string.Empty;
 
     [ObservableProperty]
-    public partial bool IsDownloading { get; set; }
+    private bool _isDownloading;
 
     /// <summary>本地曲目无需下载，仅网络音源（FTP / Navidrome）可用。</summary>
     public bool CanDownload => CurrentTrack is { SourceType: not MusicSourceType.Local };
@@ -309,45 +309,45 @@ public partial class PlayerViewModel : ViewModelBase
 
     /// <summary>新建歌单输入框内容。</summary>
     [ObservableProperty]
-    public partial string NewPlaylistName { get; set; } = string.Empty;
+    private string _newPlaylistName = string.Empty;
 
     // ---------------- 歌词搜索 ----------------
 
     /// <summary>歌词搜索面板是否展开。</summary>
     [ObservableProperty]
-    public partial bool IsMetadataSearchOpen { get; set; }
+    private bool _isMetadataSearchOpen;
 
     /// <summary>搜索结果面板是否展开。</summary>
     public bool IsSearchResultsVisible => SearchResults.Count > 0;
 
     [ObservableProperty]
-    public partial string MetadataSearchStatusText { get; set; } = string.Empty;
+    private string _metadataSearchStatusText = string.Empty;
 
     [ObservableProperty]
-    public partial bool IsSearchingMetadata { get; set; }
+    private bool _isSearchingMetadata;
 
     /// <summary>可编辑的歌曲元数据，用于修正错误标题后重新搜索。</summary>
     [ObservableProperty]
-    public partial string SearchTitle { get; set; } = string.Empty;
+    private string _searchTitle = string.Empty;
 
     [ObservableProperty]
-    public partial string SearchArtist { get; set; } = string.Empty;
+    private string _searchArtist = string.Empty;
 
     [ObservableProperty]
-    public partial string SearchAlbum { get; set; } = string.Empty;
+    private string _searchAlbum = string.Empty;
 
     [ObservableProperty]
-    public partial string SearchYear { get; set; } = string.Empty;
+    private string _searchYear = string.Empty;
 
     public IReadOnlyList<MetadataProviderOption> SearchProviders { get; }
 
     [ObservableProperty]
-    public partial MetadataProviderOption? SelectedSearchProvider { get; set; }
+    private MetadataProviderOption? _selectedSearchProvider;
 
     public ObservableCollection<MetadataSearchResultViewModel> SearchResults { get; } = [];
 
     [ObservableProperty]
-    public partial MetadataSearchResultViewModel? SelectedSearchResult { get; set; }
+    private MetadataSearchResultViewModel? _selectedSearchResult;
 
     // ---------------- 命令 ----------------
 

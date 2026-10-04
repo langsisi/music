@@ -6,7 +6,8 @@
              xmlns:controls="using:Music.Controls"
              mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="760"
              x:Class="Music.Views.MetadataSearchPanel"
-             x:DataType="vm:PlayerViewModel">
+             x:DataType="vm:PlayerViewModel"
+             x:CompileBindings="True">
 
     <UserControl.Styles>
         <Style Selector="Border.resultrow">

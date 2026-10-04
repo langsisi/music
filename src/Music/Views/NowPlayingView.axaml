@@ -7,7 +7,8 @@
              xmlns:controls="using:Music.Controls"
              mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="760"
              x:Class="Music.Views.NowPlayingView"
-             x:DataType="vm:MainViewModel">
+             x:DataType="vm:MainViewModel"
+             x:CompileBindings="True">
 
     <UserControl.Styles>
         <!-- 队列当前行高亮 -->

@@ -43,7 +43,7 @@ public partial class LibraryViewModel : PageViewModel
     public ObservableCollection<LibraryFilter> Filters { get; } = [];
 
     [ObservableProperty]
-    public partial LibraryFilter? SelectedFilter { get; set; }
+    private LibraryFilter? _selectedFilter;
 
     partial void OnSelectedFilterChanged(LibraryFilter? value)
     {
@@ -67,20 +67,20 @@ public partial class LibraryViewModel : PageViewModel
             ?? Filters.FirstOrDefault();
 
     [ObservableProperty]
-    public partial string SearchText { get; set; } = string.Empty;
+    private string _searchText = string.Empty;
 
     partial void OnSearchTextChanged(string value) => _ = RefreshTracksAsync();
 
     [ObservableProperty]
-    public partial string NewCategoryName { get; set; } = string.Empty;
+    private string _newCategoryName = string.Empty;
 
     [ObservableProperty]
-    public partial int TrackCount { get; set; }
+    private int _trackCount;
 
     partial void OnTrackCountChanged(int value) => OnPropertyChanged(nameof(Description));
 
     [ObservableProperty]
-    public partial bool IsEmpty { get; set; }
+    private bool _isEmpty;
 
     public bool HasTracks => TrackCount > 0;
 

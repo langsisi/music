@@ -27,5 +27,5 @@ public partial class QueueItemViewModel : ObservableObject
 
     /// <summary>是否为当前正在播放的曲目，用于高亮。</summary>
     [ObservableProperty]
-    public partial bool IsCurrent { get; set; }
+    private bool _isCurrent;
 }

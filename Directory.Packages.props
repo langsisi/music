@@ -1,40 +1,33 @@
 <Project>
-    <!-- https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management -->
-    <PropertyGroup>
-        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    </PropertyGroup>
-    <ItemGroup>
-        <!-- Avalonia packages -->
-        <!-- Important: keep version in sync! -->
-        <PackageVersion Include="Avalonia" Version="12.1.3" />
-        <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.3" />
-        <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.3" />
-        <PackageVersion Include="Avalonia.Desktop" Version="12.1.3" />
-        <PackageVersion Include="Avalonia.Android" Version="12.1.3" />
-        <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
-
-        <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-
-        <!-- Audio engine (managed layer, cross-platform) -->
-        <PackageVersion Include="LibVLCSharp" Version="3.10.1" />
-        <!-- Native libvlc, referenced by platform heads only -->
-        <PackageVersion Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
-        <PackageVersion Include="VideoLAN.LibVLC.Android" Version="3.6.5" />
-
-        <!-- Local media metadata -->
-        <PackageVersion Include="TagLibSharp" Version="2.3.0" />
-
-        <!-- FTP 音源（跨平台托管实现，无原生依赖） -->
-        <PackageVersion Include="FluentFTP" Version="55.0.0" />
-
-        <!-- Local storage: favorites / categories / audio cache index -->
-        <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
-
-        <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
-
-        <!-- Windows 上用 DPAPI 加密私有仓库令牌 -->
-        <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
-
-        <PackageVersion Include="Xamarin.AndroidX.Core.SplashScreen" Version="1.0.1.15" />
-    </ItemGroup>
+  <!-- https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Avalonia packages -->
+    <!-- Important: keep version in sync! -->
+    <PackageVersion Include="Avalonia" Version="12.1.3" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.3" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.3" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.3" />
+    <PackageVersion Include="Avalonia.Android" Version="12.1.3" />
+    <PackageVersion Include="Avalonia.iOS" Version="12.1.3" />
+    <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <!-- Audio engine (managed layer, cross-platform) -->
+    <PackageVersion Include="LibVLCSharp" Version="3.10.1" />
+    <!-- Native libvlc, referenced by platform heads only -->
+    <PackageVersion Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
+    <PackageVersion Include="VideoLAN.LibVLC.Android" Version="3.6.5" />
+    <!-- Local media metadata -->
+    <PackageVersion Include="TagLibSharp" Version="2.3.0" />
+    <!-- FTP 音源（跨平台托管实现，无原生依赖） -->
+    <PackageVersion Include="FluentFTP" Version="55.0.0" />
+    <!-- Local storage: favorites / categories / audio cache index -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <!-- Windows 上用 DPAPI 加密私有仓库令牌 -->
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
+    <PackageVersion Include="Xamarin.AndroidX.Core.SplashScreen" Version="1.0.1.15" />
+  </ItemGroup>
 </Project>

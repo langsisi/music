@@ -55,7 +55,7 @@ public partial class MainViewModel : ViewModelBase
     public ObservableCollection<NavigationItem> NavItems { get; }
 
     [ObservableProperty]
-    public partial NavigationItem? SelectedNavItem { get; set; }
+    private NavigationItem? _selectedNavItem;
 
     partial void OnSelectedNavItemChanged(NavigationItem? value)
         => OnPropertyChanged(nameof(CurrentPage));
@@ -65,7 +65,7 @@ public partial class MainViewModel : ViewModelBase
 
     /// <summary>紧凑布局（窄屏 / 手机）：隐藏左侧导航，改用底部标签栏。</summary>
     [ObservableProperty]
-    public partial bool IsCompact { get; set; }
+    private bool _isCompact;
 
     partial void OnIsCompactChanged(bool value) => OnPropertyChanged(nameof(IsWide));
 
@@ -73,7 +73,7 @@ public partial class MainViewModel : ViewModelBase
 
     /// <summary>全屏「正在播放」页是否展开。</summary>
     [ObservableProperty]
-    public partial bool IsNowPlayingOpen { get; set; }
+    private bool _isNowPlayingOpen;
 
     /// <summary>由 View 在尺寸变化时调用。</summary>
     public void UpdateLayout(double width) => IsCompact = width < CompactBreakpoint;

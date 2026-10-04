@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- 版本号与 Core / Android 对齐；ApplicationId 会映射为 CFBundleIdentifier。
+         发布时由 scripts/publish-release.ps1 用 -p:Version 覆盖。 -->
+    <Version>1.1.0</Version>
+    <ApplicationTitle>ZMusic</ApplicationTitle>
+    <ApplicationId>zhusl.music</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
+
+    <!-- 刻意不设 RuntimeIdentifier / RuntimeIdentifiers：
+         设置后会让 dotnet build 默认按真机 RID 出包，模拟器调试（-t:Run）会失败。
+         真机 / 模拟器 RID 由构建命令用 -p:RuntimeIdentifier 显式指定。 -->
+
+    <!-- 无 Apple 开发者账号时可在 Mac 上用 -p:CodesignKey="" 关闭签名做模拟器调试。 -->
+    <CodesignKey>iPhone Developer</CodesignKey>
+    <CodesignEntitlements>Entitlements.plist</CodesignEntitlements>
+    <XSAppIconAssets>Assets.xcassets/AppIcon.appiconset</XSAppIconAssets>
+  </PropertyGroup>
+
+  <!-- AOT / 裁剪：
+       iOS 禁止 JIT，真机 Release 由 iOS SDK 自动走 Mono AOT；这里显式声明裁剪。
+       按方案 11.3 / 风险 R4，先用 partial 起步，Release 验证稳定后再收紧为 full。
+       NativeAOT（PublishAot）当前不支持 iOS，故不启用。 -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.iOS" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Music\Music.csproj" />
+  </ItemGroup>
+</Project>

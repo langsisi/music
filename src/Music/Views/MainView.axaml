@@ -8,7 +8,8 @@
              xmlns:views="using:Music.Views"
              mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="760"
              x:Class="Music.Views.MainView"
-             x:DataType="vm:MainViewModel">
+             x:DataType="vm:MainViewModel"
+             x:CompileBindings="True">
 
     <Grid RowDefinitions="*,Auto,Auto" Background="{DynamicResource AppBackgroundBrush}"
           Classes.compact="{Binding IsCompact}">

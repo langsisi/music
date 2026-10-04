@@ -36,8 +36,8 @@ public partial class MetadataSearchResultViewModel : ObservableObject
     public string LyricsBadge => Candidate.HasLyrics ? "歌词" : "无歌词";
 
     [ObservableProperty]
-    public partial Bitmap? Cover { get; set; }
+    private Bitmap? _cover;
 
     [ObservableProperty]
-    public partial bool IsSelected { get; set; }
+    private bool _isSelected;
 }

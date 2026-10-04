@@ -6,7 +6,8 @@
              xmlns:controls="using:Music.Controls"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
              x:Class="Music.Views.Pages.DiscoverView"
-             x:DataType="pages:DiscoverViewModel">
+             x:DataType="pages:DiscoverViewModel"
+             x:CompileBindings="True">
 
     <StackPanel HorizontalAlignment="Center"
                 VerticalAlignment="Center"

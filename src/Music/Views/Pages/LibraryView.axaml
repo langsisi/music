@@ -7,7 +7,8 @@
              xmlns:controls="using:Music.Controls"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
              x:Class="Music.Views.Pages.LibraryView"
-             x:DataType="pages:LibraryViewModel">
+             x:DataType="pages:LibraryViewModel"
+             x:CompileBindings="True">
 
     <StackPanel Spacing="14">
 

@@ -6,7 +6,8 @@
              xmlns:controls="using:Music.Controls"
              mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="76"
              x:Class="Music.Views.PlayerBarView"
-             x:DataType="vm:MainViewModel">
+             x:DataType="vm:MainViewModel"
+             x:CompileBindings="True">
 
     <UserControl.Resources>
         <!-- 曲目信息块（封面 + 标题/歌手），宽屏与紧凑布局共用。 -->
@@ -35,7 +36,11 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Border Height="{StaticResource BottomBarHeight}"
+    <!-- 高度改为随内容自适应（MinHeight 兜底）：内容（传输行 + 进度行）比 76 略高，
+         固定高度会把进度条裁掉、并让整排按钮贴着顶边。加上下内边距后自动留白，
+         播放按钮随之下移，进度条也能完整显示；紧凑版内容矮，仍由 MinHeight 保持 76。 -->
+    <Border MinHeight="{StaticResource BottomBarHeight}"
+            Padding="0,6"
             Background="{DynamicResource SurfaceAltBrush}"
             BorderBrush="{DynamicResource BorderSubtleBrush}"
             BorderThickness="0,1,0,0">

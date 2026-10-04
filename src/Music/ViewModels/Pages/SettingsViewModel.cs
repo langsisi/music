@@ -64,7 +64,7 @@ public partial class SettingsViewModel : PageViewModel
     public IReadOnlyList<ThemeOption> ThemeOptions { get; }
 
     [ObservableProperty]
-    public partial ThemeOption SelectedTheme { get; set; }
+    private ThemeOption _selectedTheme;
 
     partial void OnSelectedThemeChanged(ThemeOption value)
     {
@@ -82,7 +82,7 @@ public partial class SettingsViewModel : PageViewModel
 
     /// <summary>缓存上限（MB），0 表示不缓存。</summary>
     [ObservableProperty]
-    public partial double CacheLimitMb { get; set; }
+    private double _cacheLimitMb;
 
     partial void OnCacheLimitMbChanged(double value)
     {
@@ -116,7 +116,7 @@ public partial class SettingsViewModel : PageViewModel
         : $"{CacheLimitMb / 1024.0:0.##} GB";
 
     [ObservableProperty]
-    public partial string CacheUsageText { get; set; } = "统计中…";
+    private string _cacheUsageText = "统计中…";
 
     [RelayCommand]
     private async Task ClearCache()
@@ -138,7 +138,7 @@ public partial class SettingsViewModel : PageViewModel
 
     /// <summary>局域网歌词广播：手机连蓝牙音箱时打开该网址即可看滚动歌词。</summary>
     [ObservableProperty]
-    public partial bool BroadcastEnabled { get; set; }
+    private bool _broadcastEnabled;
 
     partial void OnBroadcastEnabledChanged(bool value)
     {
@@ -158,7 +158,7 @@ public partial class SettingsViewModel : PageViewModel
     public string BroadcastStatusSummary => BroadcastEnabled ? "已开启" : "已关闭";
 
     [ObservableProperty]
-    public partial decimal? BroadcastPort { get; set; }
+    private decimal? _broadcastPort;
 
     partial void OnBroadcastPortChanged(decimal? value)
     {
@@ -179,24 +179,24 @@ public partial class SettingsViewModel : PageViewModel
     }
 
     [ObservableProperty]
-    public partial string BroadcastStatusText { get; set; } = string.Empty;
+    private string _broadcastStatusText = string.Empty;
 
     [ObservableProperty]
-    public partial string BroadcastUrlText { get; set; } = string.Empty;
+    private string _broadcastUrlText = string.Empty;
 
     public string VersionText => UpdateService.CurrentVersionText;
 
     // ---------------- 在线升级 ----------------
 
     [ObservableProperty]
-    public partial string UpdateStatusText { get; set; } = "尚未检查更新。";
+    private string _updateStatusText = "尚未检查更新。";
 
     [ObservableProperty]
-    public partial bool IsCheckingUpdate { get; set; }
+    private bool _isCheckingUpdate;
 
     /// <summary>检查到新版本后才有值，用于显示「下载并安装」。</summary>
     [ObservableProperty]
-    public partial UpdateManifest? PendingUpdate { get; set; }
+    private UpdateManifest? _pendingUpdate;
 
     partial void OnPendingUpdateChanged(UpdateManifest? value)
     {
@@ -256,7 +256,9 @@ public partial class SettingsViewModel : PageViewModel
 
             UpdateStatusText = OperatingSystem.IsAndroid()
                 ? "下载完成，正在打开系统安装界面…"
-                : "下载完成，正在重启应用以完成升级…";
+                : OperatingSystem.IsIOS()
+                    ? "iOS 不支持应用内自更新，请通过 App Store 更新。"
+                    : "下载完成，正在重启应用以完成升级…";
             _updates.Install(package);
         }
         catch (Exception ex)

@@ -86,7 +86,7 @@ public partial class HomeViewModel : PageViewModel
 
     /// <summary>收藏的曲目数，用于首页「我喜欢的」大卡片。</summary>
     [ObservableProperty]
-    public partial int FavoriteCount { get; set; }
+    private int _favoriteCount;
 
     public string FavoriteCountText => $"{FavoriteCount} 首歌曲";
 

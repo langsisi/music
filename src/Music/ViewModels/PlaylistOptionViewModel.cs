@@ -18,5 +18,5 @@ public partial class PlaylistOptionViewModel : ObservableObject
     public string Name { get; }
 
     [ObservableProperty]
-    public partial bool IsMember { get; set; }
+    private bool _isMember;
 }

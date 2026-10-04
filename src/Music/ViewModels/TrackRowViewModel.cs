@@ -44,7 +44,7 @@ public partial class TrackRowViewModel : ObservableObject
     // ---------------- 收藏（写入由页面统一发起，见 LibraryViewModel） ----------------
 
     [ObservableProperty]
-    public partial bool IsFavorite { get; set; }
+    private bool _isFavorite;
 
     partial void OnIsFavoriteChanged(bool value) => OnPropertyChanged(nameof(FavoriteIcon));
 
@@ -103,7 +103,7 @@ public partial class TrackCategoryItem : ObservableObject
     public string Name { get; }
 
     [ObservableProperty]
-    public partial bool IsMember { get; set; }
+    private bool _isMember;
 
     partial void OnIsMemberChanged(bool value) => OnPropertyChanged(nameof(MarkIcon));
 

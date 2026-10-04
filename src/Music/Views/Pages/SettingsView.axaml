@@ -7,7 +7,8 @@
              xmlns:controls="using:Music.Controls"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
              x:Class="Music.Views.Pages.SettingsView"
-             x:DataType="pages:SettingsViewModel">
+             x:DataType="pages:SettingsViewModel"
+             x:CompileBindings="True">
 
     <!-- 设置项统一为「分组卡片」：标签靠左，值/控件靠右；复杂参数折叠展示。 -->
     <StackPanel Spacing="20">
@@ -315,7 +316,7 @@
                                     IsEnabled="{Binding !IsCheckingUpdate}"
                                     Command="{Binding CheckUpdateCommand}" />
                             <Button Classes="ghost small" Content="下载并安装"
-                                    IsVisible="{Binding HasPendingUpdate}"
+                                    IsVisible="{Binding CanSelfUpdate}"
                                     IsEnabled="{Binding !IsCheckingUpdate}"
                                     Command="{Binding InstallUpdateCommand}" />
                         </StackPanel>
