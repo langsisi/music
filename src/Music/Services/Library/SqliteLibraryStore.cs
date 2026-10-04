@@ -278,6 +278,50 @@ public sealed class SqliteLibraryStore : ILibraryStore
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>移除指定曲目，连同它们的收藏与归类关系（删除音乐时调用）。</summary>
+    public async Task RemoveTracksAsync(
+        IReadOnlyCollection<string> trackIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (trackIds.Count == 0)
+        {
+            return;
+        }
+
+        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var connection = CreateConnection();
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = await connection
+                .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            await using var command = connection.CreateCommand();
+            command.Transaction = (SqliteTransaction)transaction;
+            command.CommandText = """
+                DELETE FROM Favorites WHERE TrackId = $id;
+                DELETE FROM CategoryTracks WHERE TrackId = $id;
+                DELETE FROM Tracks WHERE Id = $id;
+                """;
+            var id = command.Parameters.Add("$id", SqliteType.Text);
+
+            foreach (var trackId in trackIds)
+            {
+                id.Value = trackId;
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     // ---------------- 收藏 ----------------
 
     public async Task<IReadOnlyCollection<string>> GetFavoriteTrackIdsAsync(

@@ -34,6 +34,7 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
 
     private static readonly HttpMethod PropFindMethod = new("PROPFIND");
     private static readonly HttpMethod MkColMethod = new("MKCOL");
+    private static readonly HttpMethod DeleteMethod = new("DELETE");
 
     private readonly WebDavSourceConfig _config;
     private readonly HttpClient _httpClient;
@@ -210,6 +211,19 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
         }
 
         progress?.Report(1);
+    }
+
+    public async Task DeleteAsync(string remotePath, CancellationToken cancellationToken)
+    {
+        var uri = BuildFileUri(remotePath);
+        using var response = await SendAsync(DeleteMethod, uri, depth: null, content: null, cancellationToken)
+            .ConfigureAwait(false);
+
+        // 2xx 表示删除成功；404 表示文件本来就不存在，同样视为成功。
+        if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.NotFound)
+        {
+            throw new IOException($"删除远端文件失败：{(int)response.StatusCode} {response.ReasonPhrase}");
+        }
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;

@@ -18,6 +18,7 @@ using Music.Services.Cache;
 using Music.Services.Library;
 using Music.Services.Lyrics;
 using Music.Services.Metadata;
+using Music.Services.Sources;
 using Music.Services.SystemMedia;
 
 namespace Music.ViewModels;
@@ -39,6 +40,7 @@ public partial class PlayerViewModel : ViewModelBase
     private readonly ISystemMediaService _systemMedia;
     private readonly MetadataScrapeService _scraper;
     private readonly IAudioCache _cache;
+    private readonly TrackDeleteService _deleteService;
     private readonly DispatcherTimer _saveTimer;
 
     private LyricDocument _lyrics = LyricDocument.Empty;
@@ -47,6 +49,7 @@ public partial class PlayerViewModel : ViewModelBase
     private string _lastSystemMediaSignature = string.Empty;
     private string _lastMediaLineKey = string.Empty;
     private bool _isFavorite;
+    private bool _isDeleting;
 
     /// <summary>从数据库回填收藏状态时不要反过来再写库。</summary>
     private bool _loadingFavorite;
@@ -65,7 +68,8 @@ public partial class PlayerViewModel : ViewModelBase
         LyricsBroadcastServer broadcast,
         ISystemMediaService systemMedia,
         MetadataScrapeService scraper,
-        IAudioCache cache)
+        IAudioCache cache,
+        TrackDeleteService deleteService)
     {
         _playback = playback;
         _settings = settings;
@@ -75,6 +79,7 @@ public partial class PlayerViewModel : ViewModelBase
         _systemMedia = systemMedia;
         _scraper = scraper;
         _cache = cache;
+        _deleteService = deleteService;
 
         SearchProviders = scraper.Providers
             .Select(provider => new MetadataProviderOption(provider.Id, provider.DisplayName))
@@ -311,6 +316,20 @@ public partial class PlayerViewModel : ViewModelBase
     /// <summary>本地曲目无需下载，仅网络音源（FTP / Navidrome）可用。在线曲目由「发现」页下载。</summary>
     public bool CanDownload => CurrentTrack is { SourceType: not (MusicSourceType.Local or MusicSourceType.Online) };
 
+    /// <summary>Navidrome 没有删除接口，其余音源均可删除。</summary>
+    public bool CanDelete => CurrentTrack is { SourceType: not MusicSourceType.Navidrome };
+
+    /// <summary>删除确认子面板是否展开。</summary>
+    [ObservableProperty]
+    private bool _isDeleteConfirmOpen;
+
+    /// <summary>主操作菜单是否可见（歌单选择与删除确认任一并列子面板展开时隐藏）。</summary>
+    public bool IsTrackActionMenuVisible => !IsPlaylistPickerOpen && !IsDeleteConfirmOpen;
+
+    partial void OnIsPlaylistPickerOpenChanged(bool value) => OnPropertyChanged(nameof(IsTrackActionMenuVisible));
+
+    partial void OnIsDeleteConfirmOpenChanged(bool value) => OnPropertyChanged(nameof(IsTrackActionMenuVisible));
+
     /// <summary>歌单（分类）列表及其归属状态。</summary>
     public ObservableCollection<PlaylistOptionViewModel> Playlists { get; } = [];
 
@@ -408,6 +427,7 @@ public partial class PlayerViewModel : ViewModelBase
         }
 
         IsPlaylistPickerOpen = false;
+        IsDeleteConfirmOpen = false;
         TrackActionStatusText = string.Empty;
         IsTrackActionsOpen = true;
         await LoadPlaylistsAsync().ConfigureAwait(true);
@@ -418,12 +438,14 @@ public partial class PlayerViewModel : ViewModelBase
     {
         IsTrackActionsOpen = false;
         IsPlaylistPickerOpen = false;
+        IsDeleteConfirmOpen = false;
         TrackActionStatusText = string.Empty;
     }
 
     [RelayCommand]
     private void OpenPlaylistPicker()
     {
+        IsDeleteConfirmOpen = false;
         TrackActionStatusText = string.Empty;
         IsPlaylistPickerOpen = true;
     }
@@ -435,7 +457,7 @@ public partial class PlayerViewModel : ViewModelBase
     [RelayCommand]
     private async Task TogglePlaylist(PlaylistOptionViewModel option)
     {
-        if (CurrentTrack?.Id is not { } trackId)
+        if (CurrentTrack is not { } track)
         {
             return;
         }
@@ -445,11 +467,13 @@ public partial class PlayerViewModel : ViewModelBase
         {
             if (target)
             {
-                await _libraryStore.AddTrackToCategoryAsync(option.Id, trackId).ConfigureAwait(true);
+                // 在线曲目原先是「不存在于曲库」的，加入歌单前先落一条记录，否则归类关系查不出来。
+                await EnsureLibraryTrackAsync(track).ConfigureAwait(true);
+                await _libraryStore.AddTrackToCategoryAsync(option.Id, track.Id).ConfigureAwait(true);
             }
             else
             {
-                await _libraryStore.RemoveTrackFromCategoryAsync(option.Id, trackId).ConfigureAwait(true);
+                await _libraryStore.RemoveTrackFromCategoryAsync(option.Id, track.Id).ConfigureAwait(true);
             }
 
             option.IsMember = target;
@@ -461,6 +485,20 @@ public partial class PlayerViewModel : ViewModelBase
         {
             TrackActionStatusText = $"操作失败：{ex.Message}";
         }
+    }
+
+    /// <summary>
+    /// 在线曲目要收藏 / 加入歌单，库里必须先有一条曲目记录，收藏与归类关系才能查出来。
+    /// 播放阶段已经把封面、歌词缓存到本地，这里直接把当前曲目（含封面路径）落库。
+    /// </summary>
+    private async Task EnsureLibraryTrackAsync(Track track)
+    {
+        if (track.SourceType != MusicSourceType.Online)
+        {
+            return;
+        }
+
+        await _libraryStore.UpsertTracksAsync([track]).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -477,9 +515,10 @@ public partial class PlayerViewModel : ViewModelBase
             var created = await _libraryStore.CreateCategoryAsync(name).ConfigureAwait(true);
             NewPlaylistName = string.Empty;
 
-            if (CurrentTrack?.Id is { } trackId)
+            if (CurrentTrack is { } track)
             {
-                await _libraryStore.AddTrackToCategoryAsync(created.Id, trackId).ConfigureAwait(true);
+                await EnsureLibraryTrackAsync(track).ConfigureAwait(true);
+                await _libraryStore.AddTrackToCategoryAsync(created.Id, track.Id).ConfigureAwait(true);
                 Playlists.Add(new PlaylistOptionViewModel(created, isMember: true));
                 TrackActionStatusText = $"已创建「{name}」并添加。";
             }
@@ -487,6 +526,52 @@ public partial class PlayerViewModel : ViewModelBase
         catch (Exception ex)
         {
             TrackActionStatusText = $"新建歌单失败：{ex.Message}";
+        }
+    }
+
+    /// <summary>打开删除确认子面板（删除源文件不可恢复，必须先确认）。</summary>
+    [RelayCommand]
+    private void OpenDeleteConfirm()
+    {
+        if (CurrentTrack is null || !CanDelete)
+        {
+            return;
+        }
+
+        IsPlaylistPickerOpen = false;
+        TrackActionStatusText = string.Empty;
+        IsDeleteConfirmOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseDeleteConfirm() => IsDeleteConfirmOpen = false;
+
+    /// <summary>删除音乐：删掉源文件（在线曲目仅移出曲库）并从曲库移除。</summary>
+    [RelayCommand]
+    private async Task DeleteTrack()
+    {
+        if (CurrentTrack is not { } track || !CanDelete || _isDeleting)
+        {
+            return;
+        }
+
+        _isDeleting = true;
+        TrackActionStatusText = "正在删除…";
+
+        try
+        {
+            var result = await _deleteService.DeleteAsync(track).ConfigureAwait(true);
+            TrackActionStatusText = result.Message;
+
+            if (result.Status == DeleteStatus.Succeeded)
+            {
+                IsDeleteConfirmOpen = false;
+                IsTrackActionsOpen = false;
+            }
+        }
+        finally
+        {
+            _isDeleting = false;
         }
     }
 
@@ -946,14 +1031,20 @@ public partial class PlayerViewModel : ViewModelBase
 
     private async Task PersistFavoriteAsync(bool isFavorite)
     {
-        if (_loadingFavorite || _playback.CurrentTrack?.Id is not { } trackId)
+        if (_loadingFavorite || _playback.CurrentTrack is not { } track)
         {
             return;
         }
 
         try
         {
-            await _libraryStore.SetFavoriteAsync(trackId, isFavorite);
+            if (isFavorite)
+            {
+                // 在线曲目先落库，收藏关系才能在曲库「收藏」里查出来。
+                await EnsureLibraryTrackAsync(track).ConfigureAwait(true);
+            }
+
+            await _libraryStore.SetFavoriteAsync(track.Id, isFavorite).ConfigureAwait(true);
         }
         catch (Exception)
         {
@@ -1068,6 +1159,7 @@ public partial class PlayerViewModel : ViewModelBase
         OnPropertyChanged(nameof(PlayModeIcon));
         OnPropertyChanged(nameof(PlayModeText));
         OnPropertyChanged(nameof(CanDownload));
+        OnPropertyChanged(nameof(CanDelete));
     }
 
     private async Task SaveSettingsAsync()

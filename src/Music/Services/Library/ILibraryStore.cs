@@ -30,6 +30,9 @@ public interface ILibraryStore
     /// <summary>移除某个音源下的全部曲目（音源被删除或重新扫描前调用）。</summary>
     Task RemoveSourceTracksAsync(string sourceId, CancellationToken cancellationToken = default);
 
+    /// <summary>移除指定曲目，并一并清掉它们的收藏与归类关系（删除音乐时调用）。</summary>
+    Task RemoveTracksAsync(IReadOnlyCollection<string> trackIds, CancellationToken cancellationToken = default);
+
     // ---------------- 收藏 ----------------
 
     /// <summary>已收藏的曲目 Id 集合，用于给列表批量打标记。</summary>

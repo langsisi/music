@@ -315,6 +315,53 @@ public sealed class SmbRemoteFileClient : IRemoteFileClient
         progress?.Report(1);
     }
 
+    public async Task DeleteAsync(string remotePath, CancellationToken cancellationToken)
+    {
+        await ConnectAsync(cancellationToken).ConfigureAwait(false);
+
+        await Task.Run(() =>
+        {
+            var store = _store!;
+            var path = ToSmbPath(remotePath);
+
+            var status = store.CreateFile(
+                out var handle,
+                out _,
+                path,
+                AccessMask.GENERIC_WRITE | AccessMask.DELETE,
+                SmbFileAttributes.Normal,
+                ShareAccess.Read | ShareAccess.Write,
+                CreateDisposition.FILE_OPEN,
+                CreateOptions.FILE_NON_DIRECTORY_FILE,
+                null);
+
+            // 文件不存在时视为已删除。
+            if (status == NTStatus.STATUS_OBJECT_NAME_NOT_FOUND)
+            {
+                return;
+            }
+
+            if (status != NTStatus.STATUS_SUCCESS)
+            {
+                throw new IOException($"打开远端文件失败：{Describe(status)}");
+            }
+
+            try
+            {
+                // SMB 没有独立的删除命令：标记为「关闭时删除」，关闭句柄即完成删除。
+                status = store.SetFileInformation(handle, new FileDispositionInformation { DeletePending = true });
+                if (status != NTStatus.STATUS_SUCCESS)
+                {
+                    throw new IOException($"删除远端文件失败：{Describe(status)}");
+                }
+            }
+            finally
+            {
+                store.CloseFile(handle);
+            }
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
     public ValueTask DisposeAsync()
     {
         try

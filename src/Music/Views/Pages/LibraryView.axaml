@@ -75,81 +75,155 @@
                     Command="{Binding CreateCategoryCommand}" />
         </Grid>
 
+        <!-- 删除等操作的失败提示（成功时列表直接刷新，不提示） -->
+        <TextBlock Text="{Binding StatusText}"
+                   IsVisible="{Binding HasStatus}"
+                   FontSize="12.5" TextWrapping="Wrap"
+                   Foreground="{DynamicResource DangerBrush}" />
+
         <Border Classes="card" Padding="8" IsVisible="{Binding !IsEmpty}">
             <ListBox ItemsSource="{Binding Tracks}"
                      Background="Transparent" BorderThickness="0"
                      MaxHeight="520">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:TrackRowViewModel">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Height="54" Margin="4,2">
+                        <Grid Height="54" Margin="4,2" ClipToBounds="True">
 
-                            <Border Grid.Column="0" Width="42" Height="42" CornerRadius="8"
-                                    ClipToBounds="True"
-                                    Background="{DynamicResource AccentSoftBrush}">
-                                <Image Stretch="UniformToFill"
-                                       Source="{Binding CoverPath, Converter={StaticResource PathToBitmap}}" />
+                            <!-- 手机端：左滑露出的删除按钮（位于内容层之下） -->
+                            <Border Width="76" HorizontalAlignment="Right"
+                                    VerticalAlignment="Stretch"
+                                    Background="{DynamicResource DangerBrush}"
+                                    CornerRadius="10"
+                                    IsVisible="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).IsCompact}">
+                                <Grid IsVisible="{Binding CanDelete}">
+                                    <!-- 图标与文字由 Grid 居中，避免受按钮内容对齐影响 -->
+                                    <StackPanel HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Spacing="2">
+                                        <Path Data="{x:Static controls:AppIcons.Trash}"
+                                              Fill="White" Width="18" Height="18" Stretch="Uniform"
+                                              HorizontalAlignment="Center" />
+                                        <TextBlock Text="删除" FontSize="11" Foreground="White"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <!-- 透明按钮铺满整块区域，点击弹出确认菜单 -->
+                                    <Button Classes="swipedelete"
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch"
+                                            ToolTip.Tip="删除音乐">
+                                        <Button.Flyout>
+                                            <MenuFlyout Placement="Top">
+                                                <MenuItem Header="删除后无法恢复，请确认" IsEnabled="False" />
+                                                <MenuItem Header="取消" />
+                                                <MenuItem Header="确认删除"
+                                                          Command="{Binding DeleteCommand}"
+                                                          CommandParameter="{Binding}" />
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </Grid>
                             </Border>
 
-                            <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Text="{Binding DisplayTitle}" FontSize="13.5"
-                                           TextTrimming="CharacterEllipsis"
-                                           Foreground="{DynamicResource TextPrimaryBrush}" />
-                                <TextBlock Text="{Binding Subtitle}" FontSize="12"
-                                           TextTrimming="CharacterEllipsis"
-                                           Foreground="{DynamicResource TextSecondaryBrush}" />
-                            </StackPanel>
+                            <!-- 内容层：手机端可左滑，桌面端常驻 -->
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto"
+                                  Background="{DynamicResource SurfaceBrush}"
+                                  PointerPressed="OnRowPointerPressed"
+                                  PointerMoved="OnRowPointerMoved"
+                                  PointerReleased="OnRowPointerReleased">
+                                <Grid.RenderTransform>
+                                    <TranslateTransform />
+                                </Grid.RenderTransform>
 
-                            <!-- 加入 / 移出分类 -->
-                            <Button Grid.Column="2" Classes="icon" VerticalAlignment="Center"
-                                    ToolTip.Tip="加入分类"
-                                    IsVisible="{Binding HasCategories}">
-                                <Path Data="{x:Static controls:AppIcons.Queue}"
-                                      Fill="{DynamicResource TextSecondaryBrush}"
-                                      Width="18" Height="18" Stretch="Uniform" />
-                                <Button.Flyout>
-                                    <Flyout Placement="Top">
-                                        <ItemsControl ItemsSource="{Binding Categories}"
-                                                      MinWidth="160">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:TrackCategoryItem">
-                                                    <Button Classes="bare"
-                                                            Command="{Binding ToggleCommand}">
-                                                        <StackPanel Orientation="Horizontal" Spacing="10">
-                                                            <Path Data="{Binding MarkIcon}"
-                                                                  Fill="{DynamicResource AccentBrush}"
-                                                                  Width="16" Height="16" Stretch="Uniform"
-                                                                  VerticalAlignment="Center" />
-                                                            <TextBlock Text="{Binding Name}" FontSize="13"
-                                                                       VerticalAlignment="Center" />
-                                                        </StackPanel>
-                                                    </Button>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </Flyout>
-                                </Button.Flyout>
-                            </Button>
+                                <Border Grid.Column="0" Width="42" Height="42" CornerRadius="8"
+                                        ClipToBounds="True"
+                                        Background="{DynamicResource AccentSoftBrush}">
+                                    <Image Stretch="UniformToFill"
+                                           Source="{Binding CoverPath, Converter={StaticResource PathToBitmap}}" />
+                                </Border>
 
-                            <!-- 收藏 -->
-                            <Button Grid.Column="3" Classes="icon" VerticalAlignment="Center"
-                                    ToolTip.Tip="收藏 / 取消收藏"
-                                    Command="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).ToggleFavoriteCommand}"
-                                    CommandParameter="{Binding}">
-                                <Path Data="{Binding FavoriteIcon}"
-                                      Fill="{DynamicResource AccentBrush}"
-                                      Width="18" Height="18" Stretch="Uniform" />
-                            </Button>
+                                <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="{Binding DisplayTitle}" FontSize="13.5"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                                    <TextBlock Text="{Binding Subtitle}" FontSize="12"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                                </StackPanel>
 
-                            <!-- 播放 -->
-                            <Button Grid.Column="4" Classes="icon" VerticalAlignment="Center"
-                                    ToolTip.Tip="播放"
-                                    Command="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).PlayTrackCommand}"
-                                    CommandParameter="{Binding}">
-                                <Path Classes="playglyph" Data="{x:Static controls:AppIcons.Play}"
-                                      Fill="{DynamicResource TextSecondaryBrush}"
-                                      Width="18" Height="18" Stretch="Uniform" />
-                            </Button>
+                                <!-- 加入 / 移出分类 -->
+                                <Button Grid.Column="2" Classes="icon" VerticalAlignment="Center"
+                                        ToolTip.Tip="加入分类"
+                                        IsVisible="{Binding HasCategories}">
+                                    <Path Data="{x:Static controls:AppIcons.Queue}"
+                                          Fill="{DynamicResource TextSecondaryBrush}"
+                                          Width="18" Height="18" Stretch="Uniform" />
+                                    <Button.Flyout>
+                                        <Flyout Placement="Top">
+                                            <ItemsControl ItemsSource="{Binding Categories}"
+                                                          MinWidth="160">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:TrackCategoryItem">
+                                                        <Button Classes="bare"
+                                                                Command="{Binding ToggleCommand}">
+                                                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                                                <Path Data="{Binding MarkIcon}"
+                                                                      Fill="{DynamicResource AccentBrush}"
+                                                                      Width="16" Height="16" Stretch="Uniform"
+                                                                      VerticalAlignment="Center" />
+                                                                <TextBlock Text="{Binding Name}" FontSize="13"
+                                                                           VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
 
+                                <!-- 收藏 -->
+                                <Button Grid.Column="3" Classes="icon" VerticalAlignment="Center"
+                                        ToolTip.Tip="收藏 / 取消收藏"
+                                        Command="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).ToggleFavoriteCommand}"
+                                        CommandParameter="{Binding}">
+                                    <Path Data="{Binding FavoriteIcon}"
+                                          Fill="{DynamicResource AccentBrush}"
+                                          Width="18" Height="18" Stretch="Uniform" />
+                                </Button>
+
+                                <!-- 播放 -->
+                                <Button Grid.Column="4" Classes="icon" VerticalAlignment="Center"
+                                        ToolTip.Tip="播放"
+                                        Command="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).PlayTrackCommand}"
+                                        CommandParameter="{Binding}">
+                                    <Path Classes="playglyph" Data="{x:Static controls:AppIcons.Play}"
+                                          Fill="{DynamicResource TextSecondaryBrush}"
+                                          Width="18" Height="18" Stretch="Uniform" />
+                                </Button>
+
+                                <!-- 桌面端：宽度足够，删除按钮常驻（点击弹出确认菜单） -->
+                                <Panel Grid.Column="5"
+                                       IsVisible="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).IsWide}">
+                                    <Button Classes="icon" VerticalAlignment="Center"
+                                            ToolTip.Tip="删除音乐"
+                                            IsVisible="{Binding CanDelete}">
+                                        <Path Data="{x:Static controls:AppIcons.Trash}"
+                                              Fill="{DynamicResource DangerBrush}"
+                                              Width="18" Height="18" Stretch="Uniform" />
+                                        <Button.Flyout>
+                                            <MenuFlyout Placement="Top">
+                                                <MenuItem Header="删除后无法恢复，请确认" IsEnabled="False" />
+                                                <MenuItem Header="取消" />
+                                                <MenuItem Header="确认删除"
+                                                          Command="{Binding DeleteCommand}"
+                                                          CommandParameter="{Binding}" />
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </Panel>
+
+                            </Grid>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

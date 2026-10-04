@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using Music.Models;
 using Music.Services.Audio;
 using Music.Services.Library;
+using Music.Services.Sources;
 
 namespace Music.ViewModels.Pages;
 
@@ -16,16 +17,21 @@ public partial class LibraryViewModel : PageViewModel
 {
     private readonly ILibraryStore _libraryStore;
     private readonly PlaybackService _playback;
+    private readonly TrackDeleteService _deleteService;
 
     /// <summary>本页自己发起的写入同样会触发 Changed，此时不需要重建列表（否则滚动位置会被重置）。</summary>
     private bool _writeInProgress;
 
     private IReadOnlyList<Category> _categories = [];
 
-    public LibraryViewModel(ILibraryStore libraryStore, PlaybackService playback)
+    public LibraryViewModel(
+        ILibraryStore libraryStore,
+        PlaybackService playback,
+        TrackDeleteService deleteService)
     {
         _libraryStore = libraryStore;
         _playback = playback;
+        _deleteService = deleteService;
 
         _libraryStore.Changed += OnLibraryChanged;
         _ = RefreshAsync();
@@ -127,6 +133,32 @@ public partial class LibraryViewModel : PageViewModel
         {
             await RefreshTracksAsync();
         }
+    }
+
+    // ---------------- 删除 ----------------
+
+    /// <summary>删除结果提示；仅在失败时给出原因，成功时随列表刷新直接消失。</summary>
+    [ObservableProperty]
+    private string _statusText = string.Empty;
+
+    partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatus));
+
+    public bool HasStatus => !string.IsNullOrEmpty(StatusText);
+
+    /// <summary>删除曲目：删掉源文件并移出曲库（Navidrome 没有删除接口，按钮不显示）。</summary>
+    [RelayCommand]
+    private async Task DeleteTrackAsync(TrackRowViewModel? row)
+    {
+        if (row is null || !row.CanDelete)
+        {
+            return;
+        }
+
+        StatusText = string.Empty;
+
+        // 删除会触发曲库 Changed，列表随之刷新、该行消失，无需手动重建。
+        var result = await _deleteService.DeleteAsync(row.Track).ConfigureAwait(true);
+        StatusText = result.Status == DeleteStatus.Succeeded ? string.Empty : result.Message;
     }
 
     // ---------------- 分类 ----------------
@@ -260,6 +292,7 @@ public partial class LibraryViewModel : PageViewModel
             var row = new TrackRowViewModel(track, WriteTrackCategoryAsync)
             {
                 IsFavorite = favoriteIds.Contains(track.Id),
+                DeleteCommand = DeleteTrackCommand,
             };
 
             row.SetCategories(_categories, categoryMap.GetValueOrDefault(track.Id) ?? []);

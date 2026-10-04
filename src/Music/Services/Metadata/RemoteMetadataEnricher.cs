@@ -111,9 +111,11 @@ public sealed class RemoteMetadataEnricher
     }
 
     /// <summary>
-    /// 同步阶段预取封面：只读远端文件的头部（内嵌封面一般都在头部），不做整文件下载。
-    /// 同一音源开若干条连接并行读取（每个 worker 独占一个连接，SMBLibrary 的客户端非线程安全），
-    /// 本地已有封面文件时直接复用；头部取不到封面时留待首次播放后再补齐。
+    /// 同步阶段预取封面与文件标签：只读远端文件的头部（内嵌封面与 ID3v2/Vorbis 标签一般都在头部），
+    /// 不做整文件下载。同一音源开若干条连接并行读取（每个 worker 独占一个连接，SMBLibrary 的客户端非线程安全），
+    /// 本地已有封面文件时直接复用；头部取不到时留待首次播放后再补齐。
+    /// 顺带用文件里的标题 / 歌手 / 专辑 / 年份覆盖「按文件名派生」的值，
+    /// 这样在另一台设备重新扫描时，之前写回文件的元数据能正确读回来。
     /// </summary>
     public async Task<int> PrefetchCoversAsync(
         IReadOnlyList<Track> tracks,
@@ -121,7 +123,7 @@ public sealed class RemoteMetadataEnricher
         CancellationToken cancellationToken)
     {
         var groups = tracks
-            .Where(NeedsCoverProbe)
+            .Where(NeedsProbe)
             .GroupBy(track => track.SourceId)
             .ToList();
 
@@ -144,10 +146,30 @@ public sealed class RemoteMetadataEnricher
         return found;
     }
 
-    private static bool NeedsCoverProbe(Track track)
+    /// <summary>
+    /// 需要读头部的情形：还没有封面，或文件标签还没读过。
+    /// 两样都齐全就不再重复读取，避免每次同步都把整个音源的头部再拉一遍。
+    /// </summary>
+    private static bool NeedsProbe(Track track)
         => track.SourceType is MusicSourceType.Ftp or MusicSourceType.Smb or MusicSourceType.WebDav
-            && string.IsNullOrEmpty(track.CoverPath)
-            && !string.IsNullOrWhiteSpace(track.RemoteId);
+            && !string.IsNullOrWhiteSpace(track.RemoteId)
+            && (string.IsNullOrEmpty(track.CoverPath) || NeedsTagRead(track));
+
+    /// <summary>
+    /// 是否要用文件标签覆盖元数据：标题仍是按文件名派生的（说明从未读过标签、也没被用户编辑过），
+    /// 且歌手为空。用户改过标题后，标题与文件名不再一致，这里就会跳过，
+    /// 避免「写回没成功」时反被文件里的旧标签把用户编辑的内容冲掉。
+    /// </summary>
+    private static bool NeedsTagRead(Track track)
+        => string.IsNullOrEmpty(track.Artist) && IsDerivedTitle(track);
+
+    /// <summary>标题是否等于文件名的去扩展名形式（远端扫描时的初始值）。</summary>
+    private static bool IsDerivedTitle(Track track)
+        => !string.IsNullOrWhiteSpace(track.RemoteId)
+            && string.Equals(
+                track.Title,
+                Path.GetFileNameWithoutExtension(track.RemoteId),
+                StringComparison.Ordinal);
 
     /// <summary>
     /// 并行预取一组曲目的封面：开 <see cref="CoverPrefetchConcurrency"/> 条连接，
@@ -201,24 +223,39 @@ public sealed class RemoteMetadataEnricher
 
                     // 单首超时/失败只跳过这一首：绝不能让一条连接因某首出错而退出，
                     // 否则并发都退出后进度就会彻底停住。
-                    string? cover;
+                    TagProbe probe;
                     try
                     {
                         using var probeCts = CreateProbeCts(cancellationToken);
-                        cover = AudioTagWriter.FindExistingCover(track.Id)
-                            ?? await TryFetchCoverAsync(client, track, probeCts.Token).ConfigureAwait(false);
+                        probe = await TryProbeAsync(client, track, probeCts.Token).ConfigureAwait(false);
                     }
                     catch (Exception)
                     {
-                        cover = null;
+                        probe = default;
                     }
 
-                    List<Track>? flush = null;
-                    if (cover is not null)
+                    // 头部没读到封面时，退回本地已导出的封面文件（可能是上一轮同步导出的）。
+                    var coverFound = false;
+                    if (string.IsNullOrEmpty(track.CoverPath))
                     {
-                        track.CoverPath = cover;
-                        Interlocked.Increment(ref found);
+                        var cover = !string.IsNullOrEmpty(probe.Cover)
+                            ? probe.Cover
+                            : AudioTagWriter.FindExistingCover(track.Id);
+                        if (cover is not null)
+                        {
+                            track.CoverPath = cover;
+                            coverFound = true;
+                            Interlocked.Increment(ref found);
+                        }
+                    }
 
+                    // 只用文件标签覆盖「还没读过标签」的曲目，避免把同设备上用户已编辑、
+                    // 但尚未成功写回文件的元数据冲掉。
+                    var metadataFound = NeedsTagRead(track) && ApplyTagMetadata(track, probe);
+
+                    List<Track>? flush = null;
+                    if (coverFound || metadataFound)
+                    {
                         lock (pendingLock)
                         {
                             pending.Add(track);
@@ -231,7 +268,7 @@ public sealed class RemoteMetadataEnricher
                     }
 
                     progress?.Report(new ScanProgress(
-                        "正在同步封面", Interlocked.Increment(ref done), tracks.Count));
+                        "正在读取曲目信息", Interlocked.Increment(ref done), tracks.Count));
 
                     if (flush is not null)
                     {
@@ -267,12 +304,12 @@ public sealed class RemoteMetadataEnricher
     }
 
     /// <summary>
-    /// 读远端文件开头 <see cref="CoverProbeBytes"/> 字节解析内嵌封面。
-    /// 同步阶段只做这一轮头部读取：绝大多数封面都在文件开头，读满 2MB 足够；
+    /// 读远端文件开头 <see cref="CoverProbeBytes"/> 字节，解析内嵌封面与标题 / 歌手 / 专辑 / 年份。
+    /// 同步阶段只做这一轮头部读取：绝大多数标签（ID3v2 / Vorbis）都在文件开头，读满 2MB 足够；
     /// 头部取不到时留到首次播放后由 <see cref="EnrichInBackground"/> 从完整文件补齐，
     /// 避免同步时把整个音源都拉下来。远端不支持 Range 时 OpenReadAsync 会从 0 顺序返回，读到上限即停。
     /// </summary>
-    private static async Task<string?> TryFetchCoverAsync(
+    private static async Task<TagProbe> TryProbeAsync(
         IRemoteFileClient client,
         Track track,
         CancellationToken cancellationToken)
@@ -280,15 +317,15 @@ public sealed class RemoteMetadataEnricher
         var remotePath = track.RemoteId;
         if (string.IsNullOrWhiteSpace(remotePath))
         {
-            return null;
+            return default;
         }
 
         return await ProbeAsync(client, track, remotePath, CoverProbeBytes, cancellationToken)
             .ConfigureAwait(false);
     }
 
-    /// <summary>从远端读取文件开头 <paramref name="limit"/> 字节写成临时文件，交给 TagLib 解析封面。</summary>
-    private static async Task<string?> ProbeAsync(
+    /// <summary>从远端读取文件开头 <paramref name="limit"/> 字节写成临时文件，交给 TagLib 解析封面与标签。</summary>
+    private static async Task<TagProbe> ProbeAsync(
         IRemoteFileClient client,
         Track track,
         string remotePath,
@@ -314,12 +351,12 @@ public sealed class RemoteMetadataEnricher
             }
 
             // TagLib 解析是同步 CPU / IO 操作，放到线程池避免卡住界面线程。
-            return await Task.Run(() => ExportFromFile(temp, track.Id), cancellationToken).ConfigureAwait(false);
+            return await Task.Run(() => ReadTagsFromFile(temp, track.Id), cancellationToken).ConfigureAwait(false);
         }
         catch (Exception)
         {
-            // 格式不受支持或文件损坏时当作没有封面。
-            return null;
+            // 格式不受支持或文件损坏时当作没有标签。
+            return default;
         }
         finally
         {
@@ -327,17 +364,59 @@ public sealed class RemoteMetadataEnricher
         }
     }
 
-    private static string? ExportFromFile(string localPath, string trackId)
+    /// <summary>解析出的标签信息：封面本地路径 + 标题 / 歌手 / 专辑 / 年份（取不到时为空）。</summary>
+    private readonly record struct TagProbe(string? Cover, string Title, string Artist, string Album, int Year);
+
+    private static TagProbe ReadTagsFromFile(string localPath, string trackId)
     {
         try
         {
             using var file = TagLib.File.Create(localPath);
-            return AudioTagWriter.ExportCover(trackId, file.Tag.Pictures);
+            var tag = file.Tag;
+
+            return new TagProbe(
+                AudioTagWriter.ExportCover(trackId, tag.Pictures),
+                tag.Title ?? string.Empty,
+                tag.FirstPerformer ?? tag.FirstAlbumArtist ?? string.Empty,
+                tag.Album ?? string.Empty,
+                (int)tag.Year);
         }
         catch (Exception)
         {
-            return null;
+            return default;
         }
+    }
+
+    /// <summary>用文件标签里的值覆盖按文件名派生的元数据；没有对应标签的字段保持不动。</summary>
+    private static bool ApplyTagMetadata(Track track, TagProbe probe)
+    {
+        var changed = false;
+
+        if (!string.IsNullOrWhiteSpace(probe.Title) && probe.Title != track.Title)
+        {
+            track.Title = probe.Title;
+            changed = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(probe.Artist) && probe.Artist != track.Artist)
+        {
+            track.Artist = probe.Artist;
+            changed = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(probe.Album) && probe.Album != track.Album)
+        {
+            track.Album = probe.Album;
+            changed = true;
+        }
+
+        if (probe.Year > 0 && probe.Year != track.Year)
+        {
+            track.Year = probe.Year;
+            changed = true;
+        }
+
+        return changed;
     }
 
     private static async Task CopyAtMostAsync(

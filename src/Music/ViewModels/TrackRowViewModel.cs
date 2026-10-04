@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Input;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -40,6 +41,15 @@ public partial class TrackRowViewModel : ObservableObject
     public string DurationText => Track.DurationText;
 
     public string? CoverPath => Track.CoverPath;
+
+    /// <summary>Navidrome 没有删除接口，其余音源都能从列表里直接删除。</summary>
+    public bool CanDelete => Track.SourceType != MusicSourceType.Navidrome;
+
+    /// <summary>
+    /// 由音乐库页面注入的「确认删除」命令。列表里的删除按钮只负责弹出确认菜单，
+    /// 菜单项通过它执行删除（菜单在弹层里，取不到 ListBox 上的命令，故挂到行上）。
+    /// </summary>
+    public ICommand? DeleteCommand { get; init; }
 
     // ---------------- 收藏（写入由页面统一发起，见 LibraryViewModel） ----------------
 

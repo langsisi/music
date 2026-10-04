@@ -48,4 +48,7 @@ public interface IRemoteFileClient : IAsyncDisposable
         Stream content,
         IProgress<double>? progress,
         CancellationToken cancellationToken);
+
+    /// <summary>删除远端文件；文件不存在时视为成功。</summary>
+    Task DeleteAsync(string remotePath, CancellationToken cancellationToken);
 }

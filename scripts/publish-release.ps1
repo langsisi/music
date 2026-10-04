@@ -6,9 +6,10 @@
     流程：清理 → dotnet publish 桌面 → 精简 libvlc → 打包 zip → 计算 SHA256
           →（可选）构建安卓 apk → 生成 latest.json（含 androidUrl/androidSha256）
           → 用 Gitea API 建/取目标 Tag 的 Release → 上传 zip/apk 附件
-          → 在本地 git 提交并推送 latest.json。
-            （不要改回 contents API：那会在远端多出一个本地没有的提交，
-             导致本地分支与远端分叉，之后每次提交代码 latest.json 都会冲突。）
+          → 用 Gitea contents API 把 latest.json 写入仓库分支（只用 Token 走 HTTPS，
+            不依赖本地 git，故升级包能传它就一定能传）
+          → 再把本地分支快进到远端，消除远端多出的提交，避免下次提交时 latest.json 冲突。
+          → 可选：传入 -KeepReleases N 时清理旧版本（保留最近 N 个，含本次；更早的连同 tag 一起删）。
 
     产物都在 artifacts/ 目录（已被 .gitignore 忽略）：
       artifacts/Music-<版本>.zip     桌面安装包，解压后覆盖安装目录
@@ -56,6 +57,10 @@ param(
     # Release 的 Tag 名。默认 v<版本>，与包名保持一致，避免 tag 与包版本对不上。
     [string]$Tag = '',
 
+    # 可选：上传成功后清理旧版本 Release，保留最近 N 个（含本次），更早的连同 tag 一起删。
+    # 不传该参数（默认 0）则不清理。
+    [int]$KeepReleases = 0,
+
     # 覆盖下载地址前缀。默认由 GiteaBaseUrl/Repo 推导（.../releases/download）。
     [string]$ReleaseBaseUrl = '',
 
@@ -86,6 +91,11 @@ $ErrorActionPreference = 'Stop'
 
 # Windows PowerShell 5.1 默认可能不启用 TLS 1.2，访问 HTTPS 的 Gitea API 会失败。
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+# 清掉从 IDE / 终端继承的 askpass 与交互提示，避免脚本里的 git 调用弹凭据提示而挂起。
+Remove-Item Env:GIT_ASKPASS -ErrorAction SilentlyContinue
+Remove-Item Env:SSH_ASKPASS -ErrorAction SilentlyContinue
+$env:GIT_TERMINAL_PROMPT = '0'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $repoRoot 'src\Music.Desktop\Music.Desktop.csproj'
@@ -321,37 +331,82 @@ if ($SkipUpload) {
     }
 
     Write-Host '==> 提交 latest.json…' -ForegroundColor Cyan
-    # 用本地 git 提交并推送，而不是走 Gitea contents API。
-    # contents API 会在远端凭空多出一个本地没有的提交，使本地分支与远端分叉；
-    # 之后每次提交代码都会因 latest.json 冲突而卡在「合并中」。
-    # 本地提交 + 推送可让两端始终同步，从根上消除这个分叉。
-    Push-Location $repoRoot
+    # 走 Gitea contents API 写入：只依赖 Token 走 HTTPS，不依赖本地 git / SSH / 凭据交互，
+    # 升级包附件能上传成功，这一步就必定能写成功。
+    $contentsUri = "$api/contents/latest.json"
+    $existing = $null
     try {
-        & git add -- latest.json
-        if ($LASTEXITCODE -ne 0) {
-            throw "git add latest.json 失败（退出码 $LASTEXITCODE）"
-        }
+        $existing = Invoke-RestMethod -Method Get -Uri "${contentsUri}?ref=$Branch" -Headers $headers -ErrorAction Stop
+    } catch {
+        $existing = $null
+    }
 
-        # 只提交 latest.json 这一个文件：--only 会忽略暂存区里用户的其它改动，
-        # 避免把未提交的代码一起卷进发布提交。
-        $dirty = & git status --porcelain -- latest.json
-        if ($null -eq $dirty) {
-            Write-Host '    latest.json 内容未变化，跳过提交'
-        } else {
-            & git commit --only -m "chore: 更新 latest.json 到 $Version" -- latest.json
-            if ($LASTEXITCODE -ne 0) {
-                throw "git commit latest.json 失败（退出码 $LASTEXITCODE）"
-            }
-        }
+    $putBody = [ordered]@{
+        content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
+        message = "chore: 更新 latest.json 到 $Version"
+        branch  = $Branch
+    }
+    if ($existing -and $existing.sha) {
+        $putBody.sha = $existing.sha
+    }
 
-        & git push origin $Branch
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "git push 失败：latest.json 已在本地提交但未推送，应用「检查更新」暂时看不到 $Version。请手动 push 后重试。"
+    Invoke-RestMethod -Method Put -Uri $contentsUri -Headers $headers `
+        -ContentType 'application/json; charset=utf-8' `
+        -Body ([Text.Encoding]::UTF8.GetBytes(($putBody | ConvertTo-Json -Depth 3))) | Out-Null
+    Write-Host '    已提交 latest.json' -ForegroundColor Green
+
+    # contents API 会在远端多出一个本地没有的提交；不拉回本地，下次提交代码就会与之分叉、
+    # 卡在 latest.json 冲突里。这里把本地分支快进到远端：latest.json 的内容刚刚已由 API 写入，
+    # 本地那份副本可直接丢弃，因此先 checkout 再 --ff-only，其余文件的改动原样保留。
+    Push-Location $repoRoot
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'  # git 的进度信息写在 stderr，别被当成终止错误
+    try {
+        $null = & git fetch origin $Branch 2>&1
+        $null = & git checkout -- latest.json 2>&1
+        $null = & git merge --ff-only "origin/$Branch" --no-edit 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host '    已把本地分支快进到远端' -ForegroundColor Green
         } else {
-            Write-Host '    已提交并推送 latest.json' -ForegroundColor Green
+            Write-Warning '手动同步：本地分支未能快进（可能存在未推送的本地提交），请稍后执行 git pull 再提交。'
         }
+    } catch {
+        Write-Warning "本地分支同步失败：$($_.Exception.Message)。latest.json 已上传成功，请稍后手动 git pull。"
     } finally {
+        $ErrorActionPreference = $prevEap
         Pop-Location
+    }
+
+    # ---------- 清理旧版本 Release ----------
+    # 本次发布已完成，保留最近 $KeepReleases 个版本（含本次），更早的 Release 连同 tag 一起删，
+    # 避免 Releases 页越堆越多。latest.json 始终指向最新包，不影响自动更新。
+    if ($KeepReleases -gt 0) {
+        Write-Host "==> 清理旧版本（保留最近 $KeepReleases 个）…" -ForegroundColor Cyan
+
+        $allReleases = @(Invoke-RestMethod -Method Get -Uri "$api/releases?limit=100" -Headers $headers)
+        # 只动版本号形态的 tag，避免误删其它用途的 Release；按创建时间倒序取最近的。
+        $versionReleases = @($allReleases |
+            Where-Object { $_.tag_name -match '^v?\d+(\.\d+){1,3}$' } |
+            Sort-Object created_at -Descending)
+
+        $keepTags = @($versionReleases | Select-Object -First $KeepReleases | ForEach-Object { $_.tag_name })
+        # 本次的 tag 无论如何都保留（重新发布旧版本时它可能排不进最近 N 个）。
+        if ($keepTags -notcontains $Tag) { $keepTags += $Tag }
+        $stale = @($versionReleases | Where-Object { $keepTags -notcontains $_.tag_name })
+
+        if ($stale.Count -eq 0) {
+            Write-Host '    没有需要清理的旧版本'
+        }
+        foreach ($rel in $stale) {
+            Invoke-RestMethod -Method Delete -Uri "$api/releases/$($rel.id)" -Headers $headers | Out-Null
+            # Gitea 删 Release 不会删除 tag，这里一并删掉，保持仓库干净。
+            try {
+                Invoke-RestMethod -Method Delete -Uri "$api/tags/$($rel.tag_name)" -Headers $headers -ErrorAction Stop | Out-Null
+            } catch {
+                Write-Warning "    删除 tag $($rel.tag_name) 失败：$($_.Exception.Message)"
+            }
+            Write-Host "    已删除旧版本 $($rel.tag_name)" -ForegroundColor Yellow
+        }
     }
 
     $uploaded = $true

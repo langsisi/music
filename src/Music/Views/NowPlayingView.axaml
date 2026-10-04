@@ -315,7 +315,7 @@
                             <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" />
 
                             <!-- 主菜单：图标固定槽位（宽高比与几何一致），文字才能对齐 -->
-                            <StackPanel IsVisible="{Binding !Player.IsPlaylistPickerOpen}">
+                            <StackPanel IsVisible="{Binding Player.IsTrackActionMenuVisible}">
                                 <Button Classes="sheetitem" Command="{Binding Player.OpenPlaylistPickerCommand}">
                                     <Grid ColumnDefinitions="Auto,*">
                                         <Border Grid.Column="0" Width="24" Height="24"
@@ -358,6 +358,55 @@
                                                    VerticalAlignment="Center" />
                                     </Grid>
                                 </Button>
+
+                                <Button Classes="sheetitem" Command="{Binding Player.OpenDeleteConfirmCommand}"
+                                        IsVisible="{Binding Player.CanDelete}">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Border Grid.Column="0" Width="24" Height="24"
+                                                VerticalAlignment="Center">
+                                            <Path Data="{x:Static controls:AppIcons.Trash}"
+                                                  Fill="{DynamicResource TextSecondaryBrush}"
+                                                  Width="18" Height="20" Stretch="Uniform"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="删除音乐" Margin="12,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+
+                                <TextBlock Text="{Binding Player.TrackActionStatusText}"
+                                           Classes="muted" FontSize="12.5" Margin="16,10,16,0"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <!-- 删除确认 -->
+                            <StackPanel IsVisible="{Binding Player.IsDeleteConfirmOpen}">
+                                <Grid ColumnDefinitions="Auto,*" Margin="10,4,16,6">
+                                    <Button Grid.Column="0" Classes="icon"
+                                            Command="{Binding Player.CloseDeleteConfirmCommand}"
+                                            ToolTip.Tip="返回">
+                                        <Path Data="{x:Static controls:AppIcons.ChevronLeft}"
+                                              Fill="{DynamicResource TextPrimaryBrush}"
+                                              Width="12.35" Height="20" Stretch="Uniform" />
+                                    </Button>
+                                    <TextBlock Grid.Column="1" Text="删除音乐" Classes="section"
+                                               Margin="4,0,0,0" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <TextBlock Text="将从音源删除该文件并移出曲库，此操作不可恢复。"
+                                           Classes="muted" FontSize="12.5" Margin="16,0,16,12"
+                                           TextWrapping="Wrap" />
+
+                                <Grid ColumnDefinitions="*,*" Margin="16,0,16,4">
+                                    <Button Grid.Column="0" Classes="ghost small"
+                                            HorizontalAlignment="Stretch"
+                                            Command="{Binding Player.CloseDeleteConfirmCommand}"
+                                            Content="取消" />
+                                    <Button Grid.Column="1" Classes="accent small" Margin="10,0,0,0"
+                                            HorizontalAlignment="Stretch"
+                                            Command="{Binding Player.DeleteTrackCommand}"
+                                            Content="确认删除" />
+                                </Grid>
 
                                 <TextBlock Text="{Binding Player.TrackActionStatusText}"
                                            Classes="muted" FontSize="12.5" Margin="16,10,16,0"

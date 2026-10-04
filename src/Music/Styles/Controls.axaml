@@ -248,6 +248,24 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
     </Style>
 
+    <!-- 左滑露出的删除按钮：透明铺满整块红色区域，悬停/按下用白色微亮提示 -->
+    <Style Selector="Button.swipedelete">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="10" />
+    </Style>
+    <Style Selector="Button.swipedelete /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="10" />
+    </Style>
+    <Style Selector="Button.swipedelete:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#33FFFFFF" />
+    </Style>
+    <Style Selector="Button.swipedelete:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#55FFFFFF" />
+    </Style>
+
     <!-- 卡片式点击区：悬停底色圆角与内部卡片一致（默认 bare 是 10，卡片是 14） -->
     <Style Selector="Button.cardhit /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="CornerRadius" Value="14" />

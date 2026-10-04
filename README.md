@@ -172,7 +172,7 @@ covers/          从标签或服务器导出的封面
 
 ## 发布新版本
 
-发布脚本 [scripts/publish-release.ps1](scripts/publish-release.ps1) 一键完成：构建桌面包 → （默认）构建安卓 apk → 生成 `latest.json` → 用 **Gitea API** 建 Release、上传附件，再在**本地 `git commit` + `git push`** 把清单提交到仓库分支。
+发布脚本 [scripts/publish-release.ps1](scripts/publish-release.ps1) 一键完成：构建桌面包 → （默认）构建安卓 apk → 生成 `latest.json` → 用 **Gitea API** 建 Release、上传附件 → 用 **contents API** 把清单写入仓库分支，并把本地分支快进到远端（避免分叉 / 冲突）。
 
 ### 前置条件
 
@@ -188,10 +188,11 @@ $env:MUSIC_GITEA_TOKEN = '<你的令牌>'    # 也可用 -Token 传入
 |---|---|---|
 | `-GiteaBaseUrl` | `https://www.294713.xyz` | Gitea 站点根地址 |
 | `-Repo` | `zhusenlin/Music` | `owner/repo` |
-| `-Branch` | `master` | 提交并推送 `latest.json` 的分支 |
+| `-Branch` | `master` | 提交 `latest.json` 所依据的分支 |
 | `-Tag` | `v<版本>` | Release 的 Tag |
 | `-Runtime` | `win-x64` | 桌面包架构 |
 | `-AndroidConfiguration` | `Debug` | 安卓构建配置 |
+| `-KeepReleases` | `0`（不清理） | 上传后清理旧版本 Release：保留最近 N 个（含本次），更早的连同 tag 一起删 |
 
 ### 一键发布
 
@@ -210,6 +211,9 @@ $env:MUSIC_GITEA_TOKEN = '<你的令牌>'    # 也可用 -Token 传入
 
 # 保留 pdb 符号文件（默认剔除）
 .\scripts\publish-release.ps1 -Version 1.1.1 -KeepSymbols
+
+# 清理旧版本：上传后只保留最近 3 个 Release（含本次），更早的连同 tag 一起删
+.\scripts\publish-release.ps1 -Version 1.1.1 -KeepReleases 3
 ```
 
 更新说明需要多行时，用 PowerShell 的 here-string 传入 `-Notes`（单行内联则用 `` `n `` 换行，如 `-Notes "第一行`n第二行"`）：
@@ -231,7 +235,8 @@ $notes = @"
 1. `dotnet publish` 桌面（`-p:Version` 注入版本号）→ 剔除 libvlc 里非当前架构的目录 → 剔除 pdb（默认省约 100MB）→ 校验 zip 根目录有 `Music.Desktop.exe` → 打包 → 计算 SHA256；
 2. （默认）构建安卓 apk：`versionCode` 由版本号推导，取 `*-Signed.apk`；Debug 用系统调试密钥即可直接安装，Release 需自行配置签名；
 3. 生成 `latest.json`（`url` 指向 Gitea Release 附件；含安卓包时附 `androidUrl`/`androidSha256`）并**写到仓库根目录**；
-4. 用 Gitea API 建/复用目标 Tag 的 Release → 删除同名旧附件后上传 zip / apk → 在**本地** `git commit` 并 `git push`，把 `latest.json` 提交到 `-Branch`（不走 contents API，避免远端多出一个本地没有的提交而造成分叉 / 冲突）。
+4. 用 Gitea API 建/复用目标 Tag 的 Release → 删除同名旧附件后上传 zip / apk → 用 **contents API**（仅 Token 鉴权，不依赖本地 git）把 `latest.json` 写入 `-Branch`，随后把本地分支快进到远端，消除远端多出的提交、避免下次提交时 `latest.json` 冲突；
+5. 传入 `-KeepReleases N` 时，删除更早的旧版本 Release 及其 tag，只保留最近 N 个（默认不清理）。
 
 产物：
 

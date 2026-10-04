@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
             }));
         services.AddSingleton<IMusicSourceFactory, MusicSourceFactory>();
         services.AddSingleton<LibrarySyncService>();
+        services.AddSingleton<TrackDeleteService>();
 
         // 播放引擎与缓存
         services.AddSingleton(new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromMinutes(5) });

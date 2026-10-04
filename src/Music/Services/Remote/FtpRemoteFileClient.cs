@@ -115,5 +115,18 @@ public sealed class FtpRemoteFileClient : IRemoteFileClient
             .ConfigureAwait(false);
     }
 
+    public async Task DeleteAsync(string remotePath, CancellationToken cancellationToken)
+    {
+        await ConnectAsync(cancellationToken).ConfigureAwait(false);
+
+        // 文件不存在时 FluentFTP 会返回失败，这里先判存在，避免把「已删除」报成错误。
+        if (!await _client.FileExists(remotePath, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await _client.DeleteFile(remotePath, cancellationToken).ConfigureAwait(false);
+    }
+
     public async ValueTask DisposeAsync() => await _client.DisposeAsync().ConfigureAwait(false);
 }

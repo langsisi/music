@@ -83,6 +83,18 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isNowPlayingOpen;
 
-    /// <summary>由 View 在尺寸变化时调用。</summary>
-    public void UpdateLayout(double width) => IsCompact = width < CompactBreakpoint;
+    /// <summary>由 View 在尺寸变化时调用；同时把断点推给各页面，供行内布局使用。</summary>
+    public void UpdateLayout(double width)
+    {
+        var compact = width < CompactBreakpoint;
+        IsCompact = compact;
+
+        foreach (var item in NavItems)
+        {
+            if (item.Page is { } page)
+            {
+                page.IsWide = !compact;
+            }
+        }
+    }
 }
