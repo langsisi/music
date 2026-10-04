@@ -11,8 +11,8 @@ using Music.Services.Ftp;
 
 namespace Music.Services.Online;
 
-/// <summary>一个可选的下载目标。<see cref="Config"/> 为 null 表示「本机音乐目录」。</summary>
-public sealed record OnlineDownloadTarget(string Id, string Name, MusicSourceConfig? Config);
+/// <summary>一个可选的下载目标，对应「设置 → 音源」里的一个音源。</summary>
+public sealed record OnlineDownloadTarget(string Id, string Name, MusicSourceConfig Config);
 
 /// <summary>
 /// 把在线曲目下载到指定目标：
@@ -38,13 +38,10 @@ public sealed class OnlineDownloadService
         _settings = settings;
     }
 
-    /// <summary>当前可用于下载的目标：本机音乐目录 + 已配置的本地文件夹 / FTP 音源。</summary>
+    /// <summary>当前可用于下载的目标：已配置且可用的本地文件夹 / FTP 音源。</summary>
     public IReadOnlyList<OnlineDownloadTarget> GetTargets()
     {
-        var targets = new List<OnlineDownloadTarget>
-        {
-            new("machine", "本机音乐目录", null),
-        };
+        var targets = new List<OnlineDownloadTarget>();
 
         foreach (var source in _settings.Current.Sources)
         {
@@ -118,9 +115,6 @@ public sealed class OnlineDownloadService
     {
         switch (target.Config)
         {
-            case null:
-                return SaveToFolder(AppPaths.DownloadDir, tempAudioPath, fileName, lyric);
-
             case LocalSourceConfig local:
                 var folder = local.Folders.FirstOrDefault(Directory.Exists)
                     ?? throw new InvalidOperationException("该本地音源还没有可用的文件夹。");
