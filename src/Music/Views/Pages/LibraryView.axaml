@@ -108,7 +108,7 @@
                                     </StackPanel>
 
                                     <!-- 透明按钮铺满整块区域，点击弹出确认菜单 -->
-                                    <Button Classes="swipedelete"
+                                    <Button Classes="swipeaction"
                                             HorizontalAlignment="Stretch"
                                             VerticalAlignment="Stretch"
                                             ToolTip.Tip="删除音乐">
@@ -125,7 +125,55 @@
                                 </Grid>
                             </Border>
 
-                            <!-- 内容层：手机端可左滑，桌面端常驻 -->
+                            <!-- 手机端：右滑露出的「加入分类」按钮（位于内容层之下） -->
+                            <Border Width="76" HorizontalAlignment="Left"
+                                    VerticalAlignment="Stretch"
+                                    Background="{DynamicResource AccentBrush}"
+                                    CornerRadius="10"
+                                    IsVisible="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).IsCompact}">
+                                <Grid IsVisible="{Binding HasCategories}">
+                                    <StackPanel HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Spacing="2">
+                                        <Path Data="{x:Static controls:AppIcons.Queue}"
+                                              Fill="White" Width="18" Height="18" Stretch="Uniform"
+                                              HorizontalAlignment="Center" />
+                                        <TextBlock Text="歌单" FontSize="11" Foreground="White"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <!-- 透明按钮铺满整块区域，点击弹出入 / 移出分类菜单 -->
+                                    <Button Classes="swipeaction"
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch"
+                                            ToolTip.Tip="加入分类">
+                                        <Button.Flyout>
+                                            <Flyout Placement="Bottom">
+                                                <ItemsControl ItemsSource="{Binding Categories}"
+                                                              MinWidth="160">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:TrackCategoryItem">
+                                                            <Button Classes="bare"
+                                                                    Command="{Binding ToggleCommand}">
+                                                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                                                    <Path Data="{Binding MarkIcon}"
+                                                                          Fill="{DynamicResource AccentBrush}"
+                                                                          Width="16" Height="16" Stretch="Uniform"
+                                                                          VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding Name}" FontSize="13"
+                                                                               VerticalAlignment="Center" />
+                                                                </StackPanel>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </Flyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </Grid>
+                            </Border>
+
+                            <!-- 内容层：手机端可左滑 / 右滑，桌面端常驻 -->
                             <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto"
                                   Background="{DynamicResource SurfaceBrush}"
                                   PointerPressed="OnRowPointerPressed"
@@ -151,36 +199,39 @@
                                                Foreground="{DynamicResource TextSecondaryBrush}" />
                                 </StackPanel>
 
-                                <!-- 加入 / 移出分类 -->
-                                <Button Grid.Column="2" Classes="icon" VerticalAlignment="Center"
-                                        ToolTip.Tip="加入分类"
-                                        IsVisible="{Binding HasCategories}">
-                                    <Path Data="{x:Static controls:AppIcons.Queue}"
-                                          Fill="{DynamicResource TextSecondaryBrush}"
-                                          Width="18" Height="18" Stretch="Uniform" />
-                                    <Button.Flyout>
-                                        <Flyout Placement="Top">
-                                            <ItemsControl ItemsSource="{Binding Categories}"
-                                                          MinWidth="160">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="vm:TrackCategoryItem">
-                                                        <Button Classes="bare"
-                                                                Command="{Binding ToggleCommand}">
-                                                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                                                <Path Data="{Binding MarkIcon}"
-                                                                      Fill="{DynamicResource AccentBrush}"
-                                                                      Width="16" Height="16" Stretch="Uniform"
-                                                                      VerticalAlignment="Center" />
-                                                                <TextBlock Text="{Binding Name}" FontSize="13"
-                                                                           VerticalAlignment="Center" />
-                                                            </StackPanel>
-                                                        </Button>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </Flyout>
-                                    </Button.Flyout>
-                                </Button>
+                                <!-- 加入 / 移出分类：桌面端内联常驻，手机端改为右滑露出 -->
+                                <Panel Grid.Column="2"
+                                       IsVisible="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).IsWide}">
+                                    <Button Classes="icon" VerticalAlignment="Center"
+                                            ToolTip.Tip="加入分类"
+                                            IsVisible="{Binding HasCategories}">
+                                        <Path Data="{x:Static controls:AppIcons.Queue}"
+                                              Fill="{DynamicResource TextSecondaryBrush}"
+                                              Width="18" Height="18" Stretch="Uniform" />
+                                        <Button.Flyout>
+                                            <Flyout Placement="Top">
+                                                <ItemsControl ItemsSource="{Binding Categories}"
+                                                              MinWidth="160">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:TrackCategoryItem">
+                                                            <Button Classes="bare"
+                                                                    Command="{Binding ToggleCommand}">
+                                                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                                                    <Path Data="{Binding MarkIcon}"
+                                                                          Fill="{DynamicResource AccentBrush}"
+                                                                          Width="16" Height="16" Stretch="Uniform"
+                                                                          VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding Name}" FontSize="13"
+                                                                               VerticalAlignment="Center" />
+                                                                </StackPanel>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </Flyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </Panel>
 
                                 <!-- 收藏 -->
                                 <Button Grid.Column="3" Classes="icon" VerticalAlignment="Center"
