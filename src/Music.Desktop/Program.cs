@@ -1,7 +1,9 @@
 using System;
 using Avalonia;
 using Microsoft.Extensions.DependencyInjection;
+using Music.Services.Security;
 using Music.Services.SystemMedia;
+using Music.Services.Update;
 
 namespace Music.Desktop;
 
@@ -18,6 +20,9 @@ sealed class Program
 #if WINDOWS
             // Windows 上用真正的 SMTC 覆盖 Core 里的空实现，让蓝牙耳机/车机显示歌名并可遥控。
             services.AddSingleton<ISystemMediaService, SmtcSystemMediaService>();
+            // 令牌用 DPAPI 加密存储；在线升级覆盖安装目录并重启。
+            services.AddSingleton<ISecretProtector, DpapiSecretProtector>();
+            services.AddSingleton<IUpdateInstaller, WindowsUpdateInstaller>();
 #endif
         });
 

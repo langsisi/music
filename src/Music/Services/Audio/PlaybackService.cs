@@ -19,9 +19,13 @@ public sealed class PlaybackService : IDisposable
     private readonly IAudioPlayer _player;
     private readonly IMediaResolver _resolver;
     private readonly List<Track> _queue = [];
+    private readonly List<Track> _recent = [];
     private readonly Random _random = new();
     private int _currentIndex = -1;
     private bool _disposed;
+
+    /// <summary>首页「最近播放」最多保留的曲目数。</summary>
+    private const int MaxRecent = 12;
 
     public PlaybackService(IAudioPlayer player, IMediaResolver resolver)
     {
@@ -41,6 +45,9 @@ public sealed class PlaybackService : IDisposable
         _currentIndex >= 0 && _currentIndex < _queue.Count ? _queue[_currentIndex] : null;
 
     public IReadOnlyList<Track> Queue => _queue;
+
+    /// <summary>本次运行期间播放过的曲目，最新的在最前（首页「最近播放」使用）。</summary>
+    public IReadOnlyList<Track> RecentTracks => _recent;
 
     public int CurrentIndex => _currentIndex;
 
@@ -91,6 +98,18 @@ public sealed class PlaybackService : IDisposable
         }
 
         _currentIndex = Math.Clamp(startIndex, 0, _queue.Count - 1);
+        await PlayCurrentAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>跳转到队列中指定位置并开始播放；越界忽略。</summary>
+    public async Task PlayAtAsync(int index)
+    {
+        if (index < 0 || index >= _queue.Count)
+        {
+            return;
+        }
+
+        _currentIndex = index;
         await PlayCurrentAsync().ConfigureAwait(true);
     }
 
@@ -182,6 +201,7 @@ public sealed class PlaybackService : IDisposable
             _player.Load(source);
             _player.Play();
             LastError = null;
+            RecordRecent(track);
         }
         catch (Exception ex)
         {
@@ -189,6 +209,23 @@ public sealed class PlaybackService : IDisposable
         }
 
         RaiseChanged();
+    }
+
+    /// <summary>把成功开播的曲目记到最近播放，去重后置顶并限制条数。</summary>
+    private void RecordRecent(Track track)
+    {
+        var existing = _recent.FindIndex(item => item.Id == track.Id);
+        if (existing >= 0)
+        {
+            _recent.RemoveAt(existing);
+        }
+
+        _recent.Insert(0, track);
+
+        if (_recent.Count > MaxRecent)
+        {
+            _recent.RemoveRange(MaxRecent, _recent.Count - MaxRecent);
+        }
     }
 
     private int PickShuffleIndex()

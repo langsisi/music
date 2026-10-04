@@ -8,16 +8,10 @@
              x:Class="Music.Views.PlayerBarView"
              x:DataType="vm:MainViewModel">
 
-    <Border Height="{StaticResource BottomBarHeight}"
-            Background="{DynamicResource SurfaceAltBrush}"
-            BorderBrush="{DynamicResource BorderSubtleBrush}"
-            BorderThickness="0,1,0,0">
-
-        <Grid ColumnDefinitions="*,Auto,*" Margin="14,0">
-
-            <!-- ============ 左：封面 + 曲目信息（点击展开全屏播放页） ============ -->
-            <Button Grid.Column="0" Classes="bare"
-                    HorizontalAlignment="Left"
+    <UserControl.Resources>
+        <!-- 曲目信息块（封面 + 标题/歌手），宽屏与紧凑布局共用。 -->
+        <DataTemplate x:Key="PlayerInfoTemplate" x:DataType="vm:MainViewModel">
+            <Button Classes="bare" HorizontalAlignment="Left"
                     Command="{Binding Player.ExpandCommand}">
                 <StackPanel Orientation="Horizontal" Spacing="12">
                     <Border Width="44" Height="44" CornerRadius="8" ClipToBounds="True"
@@ -25,97 +19,120 @@
                         <Image Stretch="UniformToFill"
                                Source="{Binding Player.CoverPath, Converter={StaticResource PathToBitmap}}" />
                     </Border>
-                    <StackPanel VerticalAlignment="Center" MaxWidth="260" Spacing="2">
-                        <TextBlock Text="{Binding Player.Title}"
-                                   FontWeight="SemiBold" FontSize="13.5"
-                                   TextTrimming="CharacterEllipsis"
-                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <!-- 文本区上限 260；窄屏时由所在列宽度进一步收窄，不再固定成更小的值。
+                         ClipToBounds 是跑马灯的前提：歌名超出宽度时靠这里裁掉溢出部分。 -->
+                    <StackPanel VerticalAlignment="Center" Spacing="2" MaxWidth="260"
+                                ClipToBounds="True">
+                        <controls:MarqueeText Text="{Binding Player.Title}"
+                                              FontWeight="SemiBold" FontSize="13.5"
+                                              Foreground="{DynamicResource TextPrimaryBrush}" />
                         <TextBlock Text="{Binding Player.Artist}"
                                    FontSize="12" TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource TextSecondaryBrush}" />
                     </StackPanel>
                 </StackPanel>
             </Button>
+        </DataTemplate>
+    </UserControl.Resources>
 
-            <!-- ============ 中：传输控制 + 进度（宽屏） ============ -->
-            <StackPanel Grid.Column="1" Width="460"
-                        IsVisible="{Binding IsWide}"
-                        VerticalAlignment="Center" Spacing="2">
+    <Border Height="{StaticResource BottomBarHeight}"
+            Background="{DynamicResource SurfaceAltBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            BorderThickness="0,1,0,0">
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
-                    <Button Classes="icon" Command="{Binding Player.ToggleShuffleCommand}"
-                            ToolTip.Tip="随机播放">
-                        <Path Data="{x:Static controls:AppIcons.Shuffle}"
-                              Fill="{DynamicResource TextSecondaryBrush}"
-                              Width="18" Height="18" Stretch="Uniform" />
-                    </Button>
+        <Grid Margin="14,0">
 
-                    <Button Classes="icon" Command="{Binding Player.PreviousCommand}"
-                            ToolTip.Tip="上一首">
-                        <Path Data="{x:Static controls:AppIcons.SkipPrevious}"
-                              Fill="{DynamicResource TextPrimaryBrush}"
-                              Width="20" Height="20" Stretch="Uniform" />
-                    </Button>
+            <!-- ============ 宽屏：左信息 | 中传输+进度 | 右音量 ============ -->
+            <Grid ColumnDefinitions="*,Auto,*" IsVisible="{Binding IsWide}">
 
-                    <Button Classes="icon primary" Command="{Binding Player.TogglePlayCommand}"
-                            ToolTip.Tip="播放 / 暂停">
-                        <Path Data="{Binding Player.PlayPauseIcon}"
-                              Fill="White" Width="18" Height="18" Stretch="Uniform" />
-                    </Button>
+                <ContentControl Grid.Column="0" Content="{Binding}"
+                                ContentTemplate="{StaticResource PlayerInfoTemplate}" />
 
-                    <Button Classes="icon" Command="{Binding Player.NextCommand}"
-                            ToolTip.Tip="下一首">
-                        <Path Data="{x:Static controls:AppIcons.SkipNext}"
-                              Fill="{DynamicResource TextPrimaryBrush}"
-                              Width="20" Height="20" Stretch="Uniform" />
-                    </Button>
+                <StackPanel Grid.Column="1" Width="460"
+                            VerticalAlignment="Center" Spacing="2">
 
-                    <Button Classes="icon" Command="{Binding Player.ToggleFavoriteCommand}"
-                            ToolTip.Tip="收藏">
-                        <Path Data="{Binding Player.FavoriteIcon}"
-                              Fill="{DynamicResource TextSecondaryBrush}"
-                              Width="18" Height="18" Stretch="Uniform" />
-                    </Button>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
+                        <!-- 播放模式：顺序 → 随机 → 列表循环 → 单曲循环，一个按钮循环切换 -->
+                        <Button Classes="icon toggle" Classes.active="{Binding Player.IsPlayModeActive}"
+                                Command="{Binding Player.CyclePlayModeCommand}"
+                                ToolTip.Tip="{Binding Player.PlayModeText}">
+                            <Path Data="{Binding Player.PlayModeIcon}"
+                                  Fill="{Binding $parent[Button].Foreground}"
+                                  Width="20" Height="20" Stretch="Uniform" />
+                        </Button>
+
+                        <Button Classes="icon" Command="{Binding Player.PreviousCommand}"
+                                ToolTip.Tip="上一首">
+                            <Path Data="{x:Static controls:AppIcons.SkipPrevious}"
+                                  Fill="{DynamicResource TextPrimaryBrush}"
+                                  Width="20" Height="20" Stretch="Uniform" />
+                        </Button>
+
+                        <Button Classes="icon primary" Command="{Binding Player.TogglePlayCommand}"
+                                ToolTip.Tip="播放 / 暂停">
+                            <Path Classes="playglyph" Data="{Binding Player.PlayPauseIcon}"
+                                  Fill="White" Width="18" Height="18" Stretch="Uniform" />
+                        </Button>
+
+                        <Button Classes="icon" Command="{Binding Player.NextCommand}"
+                                ToolTip.Tip="下一首">
+                            <Path Data="{x:Static controls:AppIcons.SkipNext}"
+                                  Fill="{DynamicResource TextPrimaryBrush}"
+                                  Width="20" Height="20" Stretch="Uniform" />
+                        </Button>
+
+                        <Button Classes="icon" Command="{Binding Player.ToggleFavoriteCommand}"
+                                ToolTip.Tip="收藏">
+                            <Path Data="{Binding Player.FavoriteIcon}"
+                                  Fill="{DynamicResource TextSecondaryBrush}"
+                                  Width="20" Height="20" Stretch="Uniform" />
+                        </Button>
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="44,*,44" VerticalAlignment="Center">
+                        <TextBlock Grid.Column="0" Text="{Binding Player.PositionText}"
+                                   FontSize="11" VerticalAlignment="Center"
+                                   HorizontalAlignment="Right" Margin="0,0,8,0"
+                                   Foreground="{DynamicResource TextTertiaryBrush}" />
+                        <Slider Grid.Column="1" Minimum="0"
+                                Maximum="{Binding Player.DurationSeconds}"
+                                Value="{Binding Player.PositionSeconds}" />
+                        <TextBlock Grid.Column="2" Text="{Binding Player.DurationText}"
+                                   FontSize="11" VerticalAlignment="Center"
+                                   HorizontalAlignment="Left" Margin="8,0,0,0"
+                                   Foreground="{DynamicResource TextTertiaryBrush}" />
+                    </Grid>
                 </StackPanel>
 
-                <Grid ColumnDefinitions="44,*,44" VerticalAlignment="Center">
-                    <TextBlock Grid.Column="0" Text="{Binding Player.PositionText}"
-                               FontSize="11" VerticalAlignment="Center"
-                               HorizontalAlignment="Right" Margin="0,0,8,0"
-                               Foreground="{DynamicResource TextTertiaryBrush}" />
-                    <Slider Grid.Column="1" Minimum="0"
-                            Maximum="{Binding Player.DurationSeconds}"
-                            Value="{Binding Player.PositionSeconds}" />
-                    <TextBlock Grid.Column="2" Text="{Binding Player.DurationText}"
-                               FontSize="11" VerticalAlignment="Center"
-                               HorizontalAlignment="Left" Margin="8,0,0,0"
-                               Foreground="{DynamicResource TextTertiaryBrush}" />
-                </Grid>
-            </StackPanel>
+                <!-- 右：音量 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                            HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button Classes="icon" Command="{Binding Player.ToggleMuteCommand}"
+                            ToolTip.Tip="静音">
+                        <Path Data="{Binding Player.VolumeIcon}"
+                              Fill="{DynamicResource TextSecondaryBrush}"
+                              Width="18" Height="18" Stretch="Uniform" />
+                    </Button>
+                    <Slider Width="110" Minimum="0" Maximum="100"
+                            Value="{Binding Player.Volume}"
+                            VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
 
-            <!-- ============ 右：音量（宽屏） ============ -->
-            <StackPanel Grid.Column="2" IsVisible="{Binding IsWide}"
-                        Orientation="Horizontal" Spacing="6"
-                        HorizontalAlignment="Right" VerticalAlignment="Center">
-                <Button Classes="icon" Command="{Binding Player.ToggleMuteCommand}"
-                        ToolTip.Tip="静音">
-                    <Path Data="{Binding Player.VolumeIcon}"
-                          Fill="{DynamicResource TextSecondaryBrush}"
-                          Width="18" Height="18" Stretch="Uniform" />
+            <!-- ============ 紧凑（手机）：左信息吃满剩余宽度 | 右侧一个播放键 ============ -->
+            <!-- 只有两列：左列 * 吸收全部剩余空间，文件名不再被右侧的空列挤窄。 -->
+            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsCompact}">
+
+                <ContentControl Grid.Column="0" Content="{Binding}"
+                                ContentTemplate="{StaticResource PlayerInfoTemplate}" />
+
+                <Button Grid.Column="1" Classes="icon primary" Margin="12,0,0,0"
+                        VerticalAlignment="Center"
+                        Command="{Binding Player.TogglePlayCommand}">
+                    <Path Classes="playglyph" Data="{Binding Player.PlayPauseIcon}"
+                          Fill="White" Width="18" Height="18" Stretch="Uniform" />
                 </Button>
-                <Slider Width="110" Minimum="0" Maximum="100"
-                        Value="{Binding Player.Volume}"
-                        VerticalAlignment="Center" />
-            </StackPanel>
-
-            <!-- ============ 右：紧凑布局只有一个播放键 ============ -->
-            <Button Grid.Column="2" Classes="icon primary"
-                    IsVisible="{Binding IsCompact}"
-                    HorizontalAlignment="Right" VerticalAlignment="Center"
-                    Command="{Binding Player.TogglePlayCommand}">
-                <Path Data="{Binding Player.PlayPauseIcon}"
-                      Fill="White" Width="18" Height="18" Stretch="Uniform" />
-            </Button>
+            </Grid>
 
         </Grid>
     </Border>

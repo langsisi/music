@@ -19,18 +19,24 @@ public readonly record struct NowPlayingInfo(
     string Album,
     string? CoverPath,
     bool IsPlaying,
-    double DurationSeconds);
+    double DurationSeconds,
+    double PositionSeconds = 0);
 
 /// <summary>
-/// 系统媒体信息（Windows 为 SMTC）。
-/// 注意：SMTC / 蓝牙 AVRCP 只承载标题、艺术家、专辑、封面与播放状态，
-/// <b>不包含歌词</b>；逐行歌词请走 <c>LyricsBroadcastServer</c>。
+/// 系统媒体信息（Windows 为 SMTC，Android 为 MediaSession）。
+/// SMTC / 蓝牙 AVRCP 协议本身不承载歌词，但车机/耳机一般会显示「专辑」字段，
+/// 因此播放时可通过 <see cref="UpdateLine"/> 把当前歌词行写进专辑字段（音流同款做法）。
 /// </summary>
 public interface ISystemMediaService
 {
     event EventHandler<MediaControlCommand>? CommandReceived;
 
     void Update(NowPlayingInfo info);
+
+    /// <summary>
+    /// 用当前歌词行替换专辑字段；传入 null 恢复真实专辑名。
+    /// </summary>
+    void UpdateLine(string? line);
 
     void Clear();
 }
@@ -45,6 +51,10 @@ public sealed class NoopSystemMediaService : ISystemMediaService
     }
 
     public void Update(NowPlayingInfo info)
+    {
+    }
+
+    public void UpdateLine(string? line)
     {
     }
 

@@ -3,67 +3,144 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:pages="using:Music.ViewModels.Pages"
+             xmlns:vm="using:Music.ViewModels"
+             xmlns:models="using:Music.Models"
              xmlns:controls="using:Music.Controls"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
              x:Class="Music.Views.Pages.HomeView"
              x:DataType="pages:HomeViewModel">
 
-    <StackPanel Spacing="18">
+    <StackPanel Spacing="24">
 
-        <!-- 欢迎横幅 -->
-        <Border CornerRadius="18" Padding="26" Background="{StaticResource AccentGradientBrush}">
-            <StackPanel Spacing="6">
-                <TextBlock Text="欢迎使用 Music" FontSize="24" FontWeight="Bold" Foreground="White" />
-                <TextBlock Text="本地音乐 · FTP · Navidrome，一个播放器全部搞定"
-                           FontSize="13" Foreground="#EEFFFFFF" />
-            </StackPanel>
-        </Border>
+        <!-- ==================== 最近播放 ==================== -->
+        <StackPanel Spacing="12">
+            <TextBlock Text="最近播放" Classes="h2" />
 
-        <TextBlock Text="音源" Classes="section" />
+            <ScrollViewer IsVisible="{Binding HasRecentTracks}"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding RecentTracks}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="14" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:Track">
+                            <Button Classes="bare" Padding="0"
+                                    Command="{Binding $parent[ItemsControl].((pages:HomeViewModel)DataContext).PlayRecentCommand}"
+                                    CommandParameter="{Binding}">
+                                <StackPanel Width="108" Spacing="7">
+                                    <Border Width="108" Height="108" CornerRadius="12"
+                                            ClipToBounds="True"
+                                            Background="{DynamicResource AccentSoftBrush}">
+                                        <Grid>
+                                            <Path Data="{x:Static controls:AppIcons.MusicNote}"
+                                                  Fill="{DynamicResource TextTertiaryBrush}"
+                                                  Width="34" Height="34" Stretch="Uniform"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <Image Stretch="UniformToFill"
+                                                   Source="{Binding CoverPath, Converter={StaticResource PathToBitmap}}" />
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="{Binding DisplayTitle}" FontSize="13"
+                                               FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Subtitle}" FontSize="11.5"
+                                               Classes="muted" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
 
-        <UniformGrid Columns="3" Rows="1">
-            <Border Classes="card" Margin="0,0,14,0" Height="112">
-                <StackPanel Spacing="8">
-                    <Path Data="{x:Static controls:AppIcons.Folder}"
-                          Fill="{DynamicResource AccentBrush}"
-                          Width="24" Height="24" Stretch="Uniform" HorizontalAlignment="Left" />
-                    <TextBlock Text="本地音乐" FontWeight="SemiBold" FontSize="14" />
-                    <TextBlock Text="扫描本机文件夹" Classes="muted" FontSize="12" />
+            <Border Classes="card" Padding="24" IsVisible="{Binding !HasRecentTracks}">
+                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                    <Path Data="{x:Static controls:AppIcons.Queue}"
+                          Fill="{DynamicResource TextTertiaryBrush}"
+                          Width="28" Height="28" Stretch="Uniform"
+                          HorizontalAlignment="Center" />
+                    <TextBlock Text="还没有播放记录" HorizontalAlignment="Center"
+                               Classes="muted" FontSize="13" />
                 </StackPanel>
             </Border>
+        </StackPanel>
 
-            <Border Classes="card" Margin="0,0,14,0" Height="112">
-                <StackPanel Spacing="8">
-                    <Path Data="{x:Static controls:AppIcons.Sources}"
-                          Fill="{DynamicResource AccentBrush}"
-                          Width="24" Height="24" Stretch="Uniform" HorizontalAlignment="Left" />
-                    <TextBlock Text="FTP 服务器" FontWeight="SemiBold" FontSize="14" />
-                    <TextBlock Text="远程音乐库" Classes="muted" FontSize="12" />
-                </StackPanel>
-            </Border>
+        <!-- ==================== 歌单 ==================== -->
+        <StackPanel Spacing="12">
+            <TextBlock Text="歌单" Classes="h2" />
 
-            <Border Classes="card" Height="112">
-                <StackPanel Spacing="8">
-                    <Path Data="{x:Static controls:AppIcons.Download}"
-                          Fill="{DynamicResource AccentBrush}"
-                          Width="24" Height="24" Stretch="Uniform" HorizontalAlignment="Left" />
-                    <TextBlock Text="Navidrome" FontWeight="SemiBold" FontSize="14" />
-                    <TextBlock Text="自建流媒体服务" Classes="muted" FontSize="12" />
-                </StackPanel>
-            </Border>
-        </UniformGrid>
+            <!-- 我喜欢的（渐变合集卡片，宽度接近页面宽度） -->
+            <Button Classes="bare cardhit lg" Padding="0"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    Command="{Binding OpenFavoritesCommand}">
+                <Border Background="{StaticResource AccentGradientBrush}"
+                        CornerRadius="18" Padding="18">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Grid.Column="0" Width="50" Height="50" CornerRadius="14"
+                                Background="#33FFFFFF">
+                            <Path Data="{x:Static controls:AppIcons.Heart}"
+                                  Fill="White" Width="24" Height="24" Stretch="Uniform"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="14,0" VerticalAlignment="Center" Spacing="3">
+                            <TextBlock Text="我喜欢的" FontSize="17" FontWeight="SemiBold"
+                                       Foreground="White" />
+                            <TextBlock Text="{Binding FavoriteCountText}" FontSize="12.5"
+                                       Foreground="#D9FFFFFF" />
+                        </StackPanel>
+                        <Border Grid.Column="2" Width="42" Height="42" CornerRadius="21"
+                                Background="White" VerticalAlignment="Center">
+                            <Path Classes="playglyph" Data="{x:Static controls:AppIcons.Play}"
+                                  Fill="{DynamicResource AccentBrush}"
+                                  Width="20" Height="20" Stretch="Uniform"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Grid>
+                </Border>
+            </Button>
 
-        <TextBlock Text="最近播放" Classes="section" Margin="0,6,0,0" />
-
-        <Border Classes="card" Padding="28">
-            <StackPanel Spacing="6" HorizontalAlignment="Center">
-                <Path Data="{x:Static controls:AppIcons.Queue}"
-                      Fill="{DynamicResource TextTertiaryBrush}"
-                      Width="28" Height="28" Stretch="Uniform" HorizontalAlignment="Center" />
-                <TextBlock Text="还没有播放记录" HorizontalAlignment="Center"
-                           Foreground="{DynamicResource TextSecondaryBrush}" />
-            </StackPanel>
-        </Border>
+            <!-- 自建分类歌单（两列网格；负边距抵消卡片自身的右侧间距，使左右边缘对齐） -->
+            <ItemsControl ItemsSource="{Binding Playlists}" IsVisible="{Binding HasPlaylists}"
+                          Margin="0,0,-12,-12">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PlaylistItemViewModel">
+                        <Button Classes="bare cardhit" Padding="0" Margin="0,0,12,12"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                Command="{Binding $parent[ItemsControl].((pages:HomeViewModel)DataContext).OpenPlaylistCommand}"
+                                CommandParameter="{Binding}">
+                            <Border Background="{DynamicResource SurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="1" CornerRadius="14" Padding="14">
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                            Background="{DynamicResource AccentSoftBrush}"
+                                            VerticalAlignment="Center">
+                                        <Path Data="{Binding Icon}"
+                                              Fill="{DynamicResource AccentBrush}"
+                                              Width="21" Height="21" Stretch="Uniform"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="12,0,0,0"
+                                                VerticalAlignment="Center" Spacing="3">
+                                        <TextBlock Text="{Binding Name}" FontSize="14"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding CountText}" FontSize="12"
+                                                   Classes="muted" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
 
     </StackPanel>
 </UserControl>

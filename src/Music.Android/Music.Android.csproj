@@ -4,11 +4,21 @@
     <TargetFramework>net10.0-android</TargetFramework>
     <SupportedOSPlatformVersion>23</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable>
-    <ApplicationId>com.CompanyName.Music</ApplicationId>
+    <ApplicationId>zhusl.music</ApplicationId>
+    <!-- 应用版本号：UpdateService 靠它判断新旧，必须与 ApplicationDisplayVersion 保持一致。
+         发布时由 scripts/publish-release.ps1 用 -p:Version 覆盖。 -->
+    <Version>1.1.0</Version>
     <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    <!-- Debug 包默认走 Fast Deployment（托管 DLL 不进 APK，靠 adb 推送到 .__override__），
+         直接拷贝/adb install 会因找不到程序集而闪退。强制打进 APK，让包在任何设备上可独立运行。 -->
+    <EmbedAssembliesIntoApk>True</EmbedAssembliesIntoApk>
+    <!-- 默认按 arm64 真机构建（含 libvlc）；模拟器构建用 -p:RuntimeIdentifiers=android-x64 覆盖。
+         注意：必须用复数 RuntimeIdentifiers，VideoLAN.LibVLC.Android 的 targets 只认这个属性，
+         用单数 RuntimeIdentifier 会导致 libvlc 缺失（应用可装但无法播放）。 -->
+    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

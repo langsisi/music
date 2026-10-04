@@ -1,9 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -12,8 +14,10 @@ using Music.Models;
 using Music.Services;
 using Music.Services.Audio;
 using Music.Services.Broadcast;
+using Music.Services.Cache;
 using Music.Services.Library;
 using Music.Services.Lyrics;
+using Music.Services.Metadata;
 using Music.Services.SystemMedia;
 
 namespace Music.ViewModels;
@@ -33,12 +37,15 @@ public partial class PlayerViewModel : ViewModelBase
     private readonly LyricsService _lyricsService;
     private readonly LyricsBroadcastServer _broadcast;
     private readonly ISystemMediaService _systemMedia;
+    private readonly MetadataScrapeService _scraper;
+    private readonly IAudioCache _cache;
     private readonly DispatcherTimer _saveTimer;
 
     private LyricDocument _lyrics = LyricDocument.Empty;
     private IReadOnlyList<string> _lyricTexts = [];
     private string? _lyricsTrackId;
     private string _lastSystemMediaSignature = string.Empty;
+    private string _lastMediaLineKey = string.Empty;
     private bool _isFavorite;
 
     /// <summary>从数据库回填收藏状态时不要反过来再写库。</summary>
@@ -56,7 +63,9 @@ public partial class PlayerViewModel : ViewModelBase
         ILibraryStore libraryStore,
         LyricsService lyricsService,
         LyricsBroadcastServer broadcast,
-        ISystemMediaService systemMedia)
+        ISystemMediaService systemMedia,
+        MetadataScrapeService scraper,
+        IAudioCache cache)
     {
         _playback = playback;
         _settings = settings;
@@ -64,6 +73,13 @@ public partial class PlayerViewModel : ViewModelBase
         _lyricsService = lyricsService;
         _broadcast = broadcast;
         _systemMedia = systemMedia;
+        _scraper = scraper;
+        _cache = cache;
+
+        SearchProviders = scraper.Providers
+            .Select(provider => new MetadataProviderOption(provider.Id, provider.DisplayName))
+            .ToList();
+        SelectedSearchProvider = SearchProviders.FirstOrDefault();
 
         // 拖动音量时不要每帧都写文件。
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
@@ -160,20 +176,67 @@ public partial class PlayerViewModel : ViewModelBase
 
     public Geometry VolumeIcon => IsMuted ? AppIcons.VolumeMute : AppIcons.VolumeUp;
 
-    public bool IsShuffleEnabled
+    /// <summary>
+    /// 播放模式：顺序 → 随机 → 列表循环 → 单曲循环，界面上由一个按钮循环切换。
+    /// 播放服务内部仍是「洗牌开关 + 循环模式」两个字段，这里只做组合映射。
+    /// </summary>
+    public PlayMode PlayMode
     {
-        get => _playback.IsShuffleEnabled;
+        get
+        {
+            if (_playback.IsShuffleEnabled)
+            {
+                return PlayMode.Shuffle;
+            }
+
+            return _playback.RepeatMode switch
+            {
+                RepeatMode.One => PlayMode.RepeatOne,
+                RepeatMode.All => PlayMode.RepeatAll,
+                _ => PlayMode.Sequential,
+            };
+        }
         set
         {
-            if (_playback.IsShuffleEnabled == value)
+            if (PlayMode == value)
             {
                 return;
             }
 
-            _playback.IsShuffleEnabled = value;
+            _playback.IsShuffleEnabled = value == PlayMode.Shuffle;
+            _playback.RepeatMode = value switch
+            {
+                PlayMode.RepeatAll => RepeatMode.All,
+                PlayMode.RepeatOne => RepeatMode.One,
+                _ => RepeatMode.Off,
+            };
+
             OnPropertyChanged();
+            OnPropertyChanged(nameof(IsPlayModeActive));
+            OnPropertyChanged(nameof(PlayModeIcon));
+            OnPropertyChanged(nameof(PlayModeText));
         }
     }
+
+    /// <summary>非「顺序播放」时按钮高亮，表示随机或循环已开启。</summary>
+    public bool IsPlayModeActive => PlayMode != PlayMode.Sequential;
+
+    /// <summary>按钮图标随模式变化；顺序播放用未高亮的循环图标。</summary>
+    public Geometry PlayModeIcon => PlayMode switch
+    {
+        PlayMode.Shuffle => AppIcons.Shuffle,
+        PlayMode.RepeatOne => AppIcons.RepeatOne,
+        _ => AppIcons.Repeat,
+    };
+
+    /// <summary>当前模式名，用于按钮提示。</summary>
+    public string PlayModeText => PlayMode switch
+    {
+        PlayMode.Shuffle => "随机播放",
+        PlayMode.RepeatAll => "列表循环",
+        PlayMode.RepeatOne => "单曲循环",
+        _ => "顺序播放",
+    };
 
     /// <summary>
     /// 当前曲目的收藏状态。写回数据库，界面上的切换只是乐观更新。
@@ -197,6 +260,21 @@ public partial class PlayerViewModel : ViewModelBase
 
     public Geometry FavoriteIcon => IsFavorite ? AppIcons.Heart : AppIcons.HeartOutline;
 
+    // ---------------- 播放队列 ----------------
+
+    /// <summary>「正在播放列表」的行数据。</summary>
+    public ObservableCollection<QueueItemViewModel> QueueItems { get; } = [];
+
+    /// <summary>队列抽屉是否展开。</summary>
+    [ObservableProperty]
+    public partial bool IsQueueOpen { get; set; }
+
+    [ObservableProperty]
+    public partial int CurrentQueueIndex { get; set; } = -1;
+
+    /// <summary>队列内容签名，用于避免随播放进度每帧重建队列列表。</summary>
+    private string _queueSignature = string.Empty;
+
     // ---------------- 歌词 ----------------
 
     public ObservableCollection<LyricLineViewModel> LyricLines { get; } = [];
@@ -205,6 +283,71 @@ public partial class PlayerViewModel : ViewModelBase
 
     [ObservableProperty]
     public partial int CurrentLyricIndex { get; set; } = -1;
+
+    // ---------------- 曲目操作弹层（三个点） ----------------
+
+    /// <summary>底部操作弹层是否展开。</summary>
+    [ObservableProperty]
+    public partial bool IsTrackActionsOpen { get; set; }
+
+    /// <summary>弹层内切换到「添加到歌单」的歌单列表。</summary>
+    [ObservableProperty]
+    public partial bool IsPlaylistPickerOpen { get; set; }
+
+    /// <summary>弹层内的操作状态提示（下载进度等）。</summary>
+    [ObservableProperty]
+    public partial string TrackActionStatusText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool IsDownloading { get; set; }
+
+    /// <summary>本地曲目无需下载，仅网络音源（FTP / Navidrome）可用。</summary>
+    public bool CanDownload => CurrentTrack is { SourceType: not MusicSourceType.Local };
+
+    /// <summary>歌单（分类）列表及其归属状态。</summary>
+    public ObservableCollection<PlaylistOptionViewModel> Playlists { get; } = [];
+
+    /// <summary>新建歌单输入框内容。</summary>
+    [ObservableProperty]
+    public partial string NewPlaylistName { get; set; } = string.Empty;
+
+    // ---------------- 歌词搜索 ----------------
+
+    /// <summary>歌词搜索面板是否展开。</summary>
+    [ObservableProperty]
+    public partial bool IsMetadataSearchOpen { get; set; }
+
+    /// <summary>搜索结果面板是否展开。</summary>
+    public bool IsSearchResultsVisible => SearchResults.Count > 0;
+
+    [ObservableProperty]
+    public partial string MetadataSearchStatusText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool IsSearchingMetadata { get; set; }
+
+    /// <summary>可编辑的歌曲元数据，用于修正错误标题后重新搜索。</summary>
+    [ObservableProperty]
+    public partial string SearchTitle { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SearchArtist { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SearchAlbum { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SearchYear { get; set; } = string.Empty;
+
+    public IReadOnlyList<MetadataProviderOption> SearchProviders { get; }
+
+    [ObservableProperty]
+    public partial MetadataProviderOption? SelectedSearchProvider { get; set; }
+
+    public ObservableCollection<MetadataSearchResultViewModel> SearchResults { get; } = [];
+
+    [ObservableProperty]
+    public partial MetadataSearchResultViewModel? SelectedSearchResult { get; set; }
 
     // ---------------- 命令 ----------------
 
@@ -218,7 +361,16 @@ public partial class PlayerViewModel : ViewModelBase
     private Task Previous() => _playback.PreviousAsync();
 
     [RelayCommand]
-    private void ToggleShuffle() => IsShuffleEnabled = !IsShuffleEnabled;
+    private void CyclePlayMode()
+    {
+        PlayMode = PlayMode switch
+        {
+            PlayMode.Sequential => PlayMode.Shuffle,
+            PlayMode.Shuffle => PlayMode.RepeatAll,
+            PlayMode.RepeatAll => PlayMode.RepeatOne,
+            _ => PlayMode.Sequential,
+        };
+    }
 
     [RelayCommand]
     private void ToggleMute() => IsMuted = !IsMuted;
@@ -231,6 +383,379 @@ public partial class PlayerViewModel : ViewModelBase
 
     [RelayCommand]
     private void Collapse() => CollapseRequested?.Invoke();
+
+    [RelayCommand]
+    private void ToggleQueue() => IsQueueOpen = !IsQueueOpen;
+
+    [RelayCommand]
+    private Task PlayQueueItem(QueueItemViewModel item) => _playback.PlayAtAsync(item.Index);
+
+    // ---------------- 曲目操作弹层 ----------------
+
+    [RelayCommand]
+    private async Task OpenTrackActions()
+    {
+        if (CurrentTrack is null)
+        {
+            return;
+        }
+
+        IsPlaylistPickerOpen = false;
+        TrackActionStatusText = string.Empty;
+        IsTrackActionsOpen = true;
+        await LoadPlaylistsAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private void CloseTrackActions()
+    {
+        IsTrackActionsOpen = false;
+        IsPlaylistPickerOpen = false;
+        TrackActionStatusText = string.Empty;
+    }
+
+    [RelayCommand]
+    private void OpenPlaylistPicker()
+    {
+        TrackActionStatusText = string.Empty;
+        IsPlaylistPickerOpen = true;
+    }
+
+    [RelayCommand]
+    private void ClosePlaylistPicker() => IsPlaylistPickerOpen = false;
+
+    /// <summary>加入 / 移出歌单（分类）。</summary>
+    [RelayCommand]
+    private async Task TogglePlaylist(PlaylistOptionViewModel option)
+    {
+        if (CurrentTrack?.Id is not { } trackId)
+        {
+            return;
+        }
+
+        var target = !option.IsMember;
+        try
+        {
+            if (target)
+            {
+                await _libraryStore.AddTrackToCategoryAsync(option.Id, trackId).ConfigureAwait(true);
+            }
+            else
+            {
+                await _libraryStore.RemoveTrackFromCategoryAsync(option.Id, trackId).ConfigureAwait(true);
+            }
+
+            option.IsMember = target;
+            TrackActionStatusText = target
+                ? $"已添加到「{option.Name}」。"
+                : $"已从「{option.Name}」移出。";
+        }
+        catch (Exception ex)
+        {
+            TrackActionStatusText = $"操作失败：{ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task CreatePlaylist()
+    {
+        var name = NewPlaylistName.Trim();
+        if (name.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var created = await _libraryStore.CreateCategoryAsync(name).ConfigureAwait(true);
+            NewPlaylistName = string.Empty;
+
+            if (CurrentTrack?.Id is { } trackId)
+            {
+                await _libraryStore.AddTrackToCategoryAsync(created.Id, trackId).ConfigureAwait(true);
+                Playlists.Add(new PlaylistOptionViewModel(created, isMember: true));
+                TrackActionStatusText = $"已创建「{name}」并添加。";
+            }
+        }
+        catch (Exception ex)
+        {
+            TrackActionStatusText = $"新建歌单失败：{ex.Message}";
+        }
+    }
+
+    /// <summary>把网络曲目下载到「音乐」目录（本地曲目无需下载）。</summary>
+    [RelayCommand]
+    private async Task DownloadTrack()
+    {
+        if (CurrentTrack is not { } track || IsDownloading || !CanDownload)
+        {
+            return;
+        }
+
+        IsDownloading = true;
+        TrackActionStatusText = "正在下载…";
+
+        try
+        {
+            // 已在缓存里的曲目会立刻回调 1，只在真正有进度时刷新百分比，避免"点一下就到 100%"。
+            var progress = new Progress<double>(value =>
+            {
+                if (value < 1)
+                {
+                    TrackActionStatusText = $"正在下载… {value * 100:0}%";
+                }
+            });
+
+            var cachedPath = await _cache.DownloadAsync(track, progress).ConfigureAwait(true);
+            var savedPath = SaveToDownloadFolder(track, cachedPath);
+            TrackActionStatusText = $"已下载到：{savedPath}";
+        }
+        catch (Exception ex)
+        {
+            TrackActionStatusText = $"下载失败：{ex.Message}";
+        }
+        finally
+        {
+            IsDownloading = false;
+        }
+    }
+
+    /// <summary>把缓存文件按「歌手 - 歌名」另存到用户可见的下载目录，重名时自动加序号。</summary>
+    private static string SaveToDownloadFolder(Track track, string cachedPath)
+    {
+        Directory.CreateDirectory(AppPaths.DownloadDir);
+
+        var extension = Path.GetExtension(cachedPath);
+        var baseName = SanitizeFileName($"{track.Artist} - {track.DisplayTitle}");
+        if (string.IsNullOrWhiteSpace(baseName) || baseName == "-")
+        {
+            baseName = SanitizeFileName(track.Id);
+        }
+
+        var destination = Path.Combine(AppPaths.DownloadDir, baseName + extension);
+        for (var index = 2; File.Exists(destination); index++)
+        {
+            destination = Path.Combine(AppPaths.DownloadDir, $"{baseName} ({index}){extension}");
+        }
+
+        File.Copy(cachedPath, destination, overwrite: false);
+        return destination;
+    }
+
+    /// <summary>把文件名中的非法字符替换成下划线。</summary>
+    private static string SanitizeFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        return new string(name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim();
+    }
+
+    // ---------------- 歌词搜索 ----------------
+
+    /// <summary>打开歌词搜索：用当前曲目的元数据预填表单，可手动修正后重新搜索。</summary>
+    [RelayCommand]
+    private void OpenMetadataSearch()
+    {
+        if (CurrentTrack is not { } track)
+        {
+            return;
+        }
+
+        SearchTitle = track.DisplayTitle;
+        SearchArtist = track.Artist;
+        SearchAlbum = track.Album;
+        SearchYear = track.Year > 0 ? track.Year.ToString() : string.Empty;
+        SearchResults.Clear();
+        SelectedSearchResult = null;
+        MetadataSearchStatusText = string.Empty;
+        OnPropertyChanged(nameof(IsSearchResultsVisible));
+
+        IsTrackActionsOpen = false;
+        IsPlaylistPickerOpen = false;
+        IsMetadataSearchOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseMetadataSearch() => IsMetadataSearchOpen = false;
+
+    /// <summary>按当前（可编辑的）元数据在指定数据源搜索候选。</summary>
+    [RelayCommand]
+    private async Task SearchMetadata()
+    {
+        if (IsSearchingMetadata || SelectedSearchProvider is not { } provider)
+        {
+            return;
+        }
+
+        IsSearchingMetadata = true;
+        MetadataSearchStatusText = "正在搜索…";
+        SearchResults.Clear();
+        SelectedSearchResult = null;
+        OnPropertyChanged(nameof(IsSearchResultsVisible));
+
+        try
+        {
+            var query = new TrackQuery(SearchTitle.Trim(), SearchArtist.Trim(), SearchAlbum.Trim());
+            var candidates = await _scraper.SearchAsync(provider.Id, query).ConfigureAwait(true);
+
+            foreach (var candidate in candidates)
+            {
+                SearchResults.Add(new MetadataSearchResultViewModel(candidate));
+            }
+
+            OnPropertyChanged(nameof(IsSearchResultsVisible));
+
+            if (SearchResults.Count == 0)
+            {
+                MetadataSearchStatusText = $"{provider.Name}没有搜到结果，试试修改标题或换个数据源。";
+                return;
+            }
+
+            MetadataSearchStatusText = $"找到 {SearchResults.Count} 个结果，点选一条后应用。";
+            SelectedSearchResult = SearchResults[0];
+            SelectedSearchResult.IsSelected = true;
+
+            _ = LoadThumbnailsAsync(provider.Id);
+        }
+        catch (Exception ex)
+        {
+            MetadataSearchStatusText = $"搜索失败：{ex.Message}";
+        }
+        finally
+        {
+            IsSearchingMetadata = false;
+        }
+    }
+
+    [RelayCommand]
+    private void SelectSearchResult(MetadataSearchResultViewModel result)
+    {
+        foreach (var item in SearchResults)
+        {
+            item.IsSelected = ReferenceEquals(item, result);
+        }
+
+        SelectedSearchResult = result;
+    }
+
+    /// <summary>应用所选结果：下载封面/歌词到本地，并保存编辑过的元数据。</summary>
+    [RelayCommand]
+    private async Task ApplySearchResult()
+    {
+        if (CurrentTrack is not { } track
+            || SelectedSearchProvider is not { } provider
+            || SelectedSearchResult is not { } result)
+        {
+            MetadataSearchStatusText = "请先选择一条搜索结果。";
+            return;
+        }
+
+        MetadataSearchStatusText = "正在应用…";
+
+        try
+        {
+            var outcome = await _scraper
+                .ApplyAsync(track, provider.Id, result.Candidate)
+                .ConfigureAwait(true);
+
+            await SaveMetadataCoreAsync(track).ConfigureAwait(true);
+
+            if (outcome.CoverUpdated)
+            {
+                OnPropertyChanged(nameof(CoverPath));
+            }
+
+            if (outcome.LyricsUpdated)
+            {
+                await LoadLyricsAsync(track).ConfigureAwait(true);
+            }
+
+            MetadataSearchStatusText = outcome.Message;
+        }
+        catch (Exception ex)
+        {
+            MetadataSearchStatusText = $"应用失败：{ex.Message}";
+        }
+    }
+
+    /// <summary>只保存当前编辑的元数据（不改动音乐文件）。</summary>
+    [RelayCommand]
+    private async Task SaveSearchMetadata()
+    {
+        if (CurrentTrack is not { } track)
+        {
+            return;
+        }
+
+        try
+        {
+            await SaveMetadataCoreAsync(track).ConfigureAwait(true);
+            MetadataSearchStatusText = "已保存到曲库。";
+        }
+        catch (Exception ex)
+        {
+            MetadataSearchStatusText = $"保存失败：{ex.Message}";
+        }
+    }
+
+    private async Task SaveMetadataCoreAsync(Track track)
+    {
+        await _scraper
+            .SaveMetadataAsync(track, SearchTitle, SearchArtist, SearchAlbum, SearchYear)
+            .ConfigureAwait(true);
+
+        if (_playback.CurrentTrack?.Id == track.Id)
+        {
+            OnPropertyChanged(nameof(Title));
+            OnPropertyChanged(nameof(Artist));
+        }
+    }
+
+    private async Task LoadPlaylistsAsync()
+    {
+        try
+        {
+            var categories = await _libraryStore.GetCategoriesAsync().ConfigureAwait(true);
+            var membership = await _libraryStore.GetTrackCategoryMapAsync().ConfigureAwait(true);
+
+            var currentId = CurrentTrack?.Id;
+            var memberIds = currentId is not null && membership.TryGetValue(currentId, out var ids)
+                ? ids
+                : [];
+
+            Playlists.Clear();
+            foreach (var category in categories)
+            {
+                Playlists.Add(new PlaylistOptionViewModel(category, memberIds.Contains(category.Id)));
+            }
+        }
+        catch (Exception)
+        {
+            // 歌单读取失败时保持空列表，不影响其它操作。
+        }
+    }
+
+    private async Task LoadThumbnailsAsync(string providerId)
+    {
+        var items = SearchResults.ToList();
+        foreach (var item in items)
+        {
+            var bytes = await _scraper.GetCoverBytesAsync(providerId, item.Candidate).ConfigureAwait(true);
+            if (bytes is null || bytes.Length == 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                using var stream = new MemoryStream(bytes);
+                item.Cover = new Bitmap(stream);
+            }
+            catch (Exception)
+            {
+                // 缩略图解码失败不影响选择。
+            }
+        }
+    }
 
     // ---------------- 内部同步 ----------------
 
@@ -245,14 +770,47 @@ public partial class PlayerViewModel : ViewModelBase
             _lyricTexts = [];
             LyricLines.Clear();
             CurrentLyricIndex = -1;
+            // 弹层内容都是针对上一首的，切歌后收起，避免误操作。
+            IsTrackActionsOpen = false;
+            IsPlaylistPickerOpen = false;
+            IsMetadataSearchOpen = false;
             OnPropertyChanged(nameof(HasLyrics));
             _ = LoadLyricsAsync(track);
             _ = LoadFavoriteAsync(track);
         }
 
+        RefreshQueue();
         RaiseAll();
         UpdateLyricHighlight();
         Publish();
+    }
+
+    /// <summary>
+    /// 刷新「正在播放列表」。Changed 事件随播放进度每帧触发，
+    /// 因此用「曲目 Id 序列」签名过滤，仅在队列真正变化时重建行集合。
+    /// </summary>
+    private void RefreshQueue()
+    {
+        var queue = _playback.Queue;
+        var signature = string.Join('|', queue.Select(track => track.Id));
+
+        if (signature != _queueSignature)
+        {
+            _queueSignature = signature;
+            QueueItems.Clear();
+
+            for (var i = 0; i < queue.Count; i++)
+            {
+                QueueItems.Add(new QueueItemViewModel(queue[i], i));
+            }
+        }
+
+        CurrentQueueIndex = _playback.CurrentIndex;
+
+        for (var i = 0; i < QueueItems.Count; i++)
+        {
+            QueueItems[i].IsCurrent = i == CurrentQueueIndex;
+        }
     }
 
     private async Task LoadLyricsAsync(Track? track)
@@ -362,6 +920,25 @@ public partial class PlayerViewModel : ViewModelBase
             _lyricTexts,
             CurrentLyricIndex));
 
+        // 开启歌词广播后，把当前歌词行写进系统媒体的「专辑」字段，蓝牙耳机/车机即可显示。
+        // 关闭广播或没有歌词时传 null，平台层恢复真实专辑名。随每个进度 tick 检查，
+        // 只有行变化（或开关变化）才真正推送，避免频繁刷元数据。
+        string? line = null;
+        if (_settings.Current.BroadcastEnabled
+            && CurrentLyricIndex >= 0
+            && CurrentLyricIndex < _lyricTexts.Count
+            && !string.IsNullOrWhiteSpace(_lyricTexts[CurrentLyricIndex]))
+        {
+            line = _lyricTexts[CurrentLyricIndex];
+        }
+
+        var lineKey = $"{track?.Id}|{line}";
+        if (lineKey != _lastMediaLineKey)
+        {
+            _lastMediaLineKey = lineKey;
+            _systemMedia.UpdateLine(line);
+        }
+
         // SMTC 只需在曲目或播放状态变化时刷新，不必跟着进度走。
         var signature = $"{track?.Id}|{_playback.IsPlaying}";
         if (signature == _lastSystemMediaSignature)
@@ -383,7 +960,8 @@ public partial class PlayerViewModel : ViewModelBase
             track.Album,
             track.CoverPath,
             _playback.IsPlaying,
-            _playback.DurationSeconds));
+            _playback.DurationSeconds,
+            _playback.PositionSeconds));
     }
 
     private void OnSystemMediaCommand(object? sender, MediaControlCommand command)
@@ -427,7 +1005,11 @@ public partial class PlayerViewModel : ViewModelBase
         OnPropertyChanged(nameof(Volume));
         OnPropertyChanged(nameof(IsMuted));
         OnPropertyChanged(nameof(VolumeIcon));
-        OnPropertyChanged(nameof(IsShuffleEnabled));
+        OnPropertyChanged(nameof(PlayMode));
+        OnPropertyChanged(nameof(IsPlayModeActive));
+        OnPropertyChanged(nameof(PlayModeIcon));
+        OnPropertyChanged(nameof(PlayModeText));
+        OnPropertyChanged(nameof(CanDownload));
     }
 
     private async Task SaveSettingsAsync()
@@ -454,4 +1036,20 @@ public partial class PlayerViewModel : ViewModelBase
             ? $"{(int)time.TotalHours}:{time.Minutes:D2}:{time.Seconds:D2}"
             : $"{time.Minutes}:{time.Seconds:D2}";
     }
+}
+
+/// <summary>播放模式（界面上由一个按钮循环切换）。后端由洗牌开关与循环模式两个字段组合表达。</summary>
+public enum PlayMode
+{
+    /// <summary>顺序播放：不随机、不循环。</summary>
+    Sequential = 0,
+
+    /// <summary>随机播放。</summary>
+    Shuffle = 1,
+
+    /// <summary>列表循环。</summary>
+    RepeatAll = 2,
+
+    /// <summary>单曲循环。</summary>
+    RepeatOne = 3,
 }

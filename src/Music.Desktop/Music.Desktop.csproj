@@ -24,6 +24,8 @@
   <!-- Native libvlc for Windows -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
     <PackageReference Include="VideoLAN.LibVLC.Windows" />
+    <!-- DPAPI：加密私有仓库访问令牌 -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
 
   <ItemGroup>

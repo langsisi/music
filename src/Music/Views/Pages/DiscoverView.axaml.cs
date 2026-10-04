@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace Music.Views.Pages;
 
-public partial class SourcesView : UserControl
+public partial class DiscoverView : UserControl
 {
-    public SourcesView()
+    public DiscoverView()
     {
         InitializeComponent();
     }

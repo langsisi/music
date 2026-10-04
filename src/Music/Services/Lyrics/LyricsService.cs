@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -39,4 +39,7 @@ public sealed class LyricsService
         _cache[track.Id] = lyrics;
         return lyrics;
     }
+
+    /// <summary>清除某曲目的歌词缓存，用于在线刮削后立即生效。</summary>
+    public void Invalidate(string trackId) => _cache.TryRemove(trackId, out _);
 }

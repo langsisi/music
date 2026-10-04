@@ -1,15 +1,13 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
 using Music.Models;
 
 namespace Music.Services.Update;
@@ -23,13 +21,13 @@ public sealed record UpdateCheckResult(
     string Message);
 
 /// <summary>
-/// 在线升级：从设置的地址拉取版本清单，比较版本号，下载并校验新版本包，
-/// 最后交给一个独立进程在应用退出后覆盖安装目录并重启。
+/// 在线升级：从内置配置的地址拉取版本清单（私有仓库可带只读令牌鉴权），比较版本号，
+/// 下载并校验新版本包，最后交给平台安装器（<see cref="IUpdateInstaller"/>）落地安装。
 /// </summary>
 public sealed class UpdateService
 {
-    private readonly ISettingsStore _settings;
     private readonly HttpClient _httpClient;
+    private readonly IUpdateInstaller _installer;
 
     /// <summary>清单里的键名通常是 camelCase，这里不区分大小写。</summary>
     private static readonly JsonSerializerOptions ManifestOptions = new()
@@ -37,10 +35,49 @@ public sealed class UpdateService
         PropertyNameCaseInsensitive = true,
     };
 
-    public UpdateService(ISettingsStore settings, HttpClient httpClient)
+    /// <summary>
+    /// 部分静态托管（例如 GitCode 的 raw 网关 raw.gitcode.com）会拒绝没有浏览器特征的请求，
+    /// 直接返回 403 Forbidden。这里带上常见的 UA 与 Accept，保证升级检查能正常拿到清单。
+    /// </summary>
+    private const string RequestUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+    private HttpRequestMessage CreateRequest(string url)
     {
-        _settings = settings;
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.TryAddWithoutValidation("User-Agent", RequestUserAgent);
+        request.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
+        ApplyAuthorization(request);
+        return request;
+    }
+
+    /// <summary>
+    /// 私有仓库鉴权：内置配置填了用户名就用 HTTP Basic（用户名 + 令牌），只填令牌则用 Gitea 的 token 方案。
+    /// </summary>
+    private static void ApplyAuthorization(HttpRequestMessage request)
+    {
+        var token = UpdateDefaults.Token;
+        if (token.Length == 0)
+        {
+            return;
+        }
+
+        var user = UpdateDefaults.User;
+        if (user.Length > 0)
+        {
+            var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{token}"));
+            request.Headers.TryAddWithoutValidation("Authorization", $"Basic {credentials}");
+        }
+        else
+        {
+            request.Headers.TryAddWithoutValidation("Authorization", $"token {token}");
+        }
+    }
+
+    public UpdateService(HttpClient httpClient, IUpdateInstaller installer)
+    {
         _httpClient = httpClient;
+        _installer = installer;
     }
 
     /// <summary>当前版本（取自入口程序集）。</summary>
@@ -49,22 +86,27 @@ public sealed class UpdateService
     public static string CurrentVersionText =>
         $"{CurrentVersion.Major}.{CurrentVersion.Minor}.{CurrentVersion.Build}";
 
-    /// <summary>Android 等平台无法自行覆盖安装，只能走应用商店。</summary>
-    public static bool CanSelfUpdate => OperatingSystem.IsWindows();
+    /// <summary>由平台安装器决定能否应用内自更新（Windows / Android 支持）。</summary>
+    public bool CanSelfUpdate => _installer.CanSelfUpdate;
 
     public async Task<UpdateCheckResult> CheckAsync(CancellationToken cancellationToken = default)
     {
-        var feedUrl = _settings.Current.UpdateFeedUrl?.Trim() ?? string.Empty;
+        var feedUrl = UpdateDefaults.FeedUrl;
         if (feedUrl.Length == 0)
         {
-            return new UpdateCheckResult(false, CurrentVersionText, null, null, "尚未配置更新地址。");
+            return new UpdateCheckResult(false, CurrentVersionText, null, null, "尚未内置更新地址。");
         }
 
         UpdateManifest? manifest;
         try
         {
-            await using var stream = await _httpClient
-                .GetStreamAsync(feedUrl, cancellationToken)
+            using var response = await _httpClient
+                .SendAsync(CreateRequest(feedUrl), HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content
+                .ReadAsStreamAsync(cancellationToken)
                 .ConfigureAwait(false);
 
             manifest = await JsonSerializer
@@ -109,6 +151,9 @@ public sealed class UpdateService
                 $"已是最新版本（{CurrentVersionText}）。");
         }
 
+        // Android 与桌面用不同的包（apk / zip），先按平台把清单里的地址归一化。
+        ApplyPlatformPackage(manifest);
+
         if (string.IsNullOrWhiteSpace(manifest.Url))
         {
             return new UpdateCheckResult(false, CurrentVersionText, manifest.Version, null, "版本信息里没有下载地址。");
@@ -133,6 +178,19 @@ public sealed class UpdateService
             manifest.Version,
             manifest,
             $"发现新版本 {manifest.Version}。");
+    }
+
+    /// <summary>
+    /// 按当前平台归一化包地址：Android 优先用清单里的 androidUrl/androidSha256，
+    /// 没有则回退到通用 url/sha256；桌面端始终用通用字段。
+    /// </summary>
+    private static void ApplyPlatformPackage(UpdateManifest manifest)
+    {
+        if (OperatingSystem.IsAndroid() && !string.IsNullOrWhiteSpace(manifest.AndroidUrl))
+        {
+            manifest.Url = manifest.AndroidUrl!;
+            manifest.Sha256 = manifest.AndroidSha256 ?? manifest.Sha256;
+        }
     }
 
     /// <summary>
@@ -173,11 +231,11 @@ public sealed class UpdateService
         Directory.CreateDirectory(folder);
 
         var safeVersion = string.Concat(manifest.Version.Where(char.IsLetterOrDigit));
-        var target = Path.Combine(folder, $"Music-{safeVersion}.zip");
+        var target = Path.Combine(folder, $"Music-{safeVersion}{ResolvePackageExtension(manifest.Url)}");
         var temp = target + ".tmp";
 
         using (var response = await _httpClient
-            .GetAsync(manifest.Url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            .SendAsync(CreateRequest(manifest.Url), HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false))
         {
             response.EnsureSuccessStatusCode();
@@ -220,51 +278,26 @@ public sealed class UpdateService
         return target;
     }
 
-    /// <summary>
-    /// 启动一个独立进程：等当前应用退出 → 解压覆盖安装目录 → 重新启动，然后关闭本应用。
-    /// </summary>
-    public void ApplyAndRestart(string packagePath)
+    /// <summary>从下载地址里取扩展名（.zip / .apk），取不到时按 .zip 处理。</summary>
+    private static string ResolvePackageExtension(string url)
     {
-        if (!CanSelfUpdate)
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
-            throw new NotSupportedException("当前平台不支持自动更新。");
+            var extension = Path.GetExtension(uri.AbsolutePath);
+            if (!string.IsNullOrWhiteSpace(extension))
+            {
+                return extension;
+            }
         }
 
-        var installDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
-        var executable = Environment.ProcessPath
-            ?? Path.Combine(installDirectory, "Music.Desktop.exe");
-
-        // 必须是独立进程：本进程退出后才能覆盖自己正在使用的文件。
-        var command = string.Join(
-            "; ",
-            $"Wait-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue",
-            "Start-Sleep -Milliseconds 800",
-            $"Expand-Archive -LiteralPath '{packagePath}' -DestinationPath '{installDirectory}' -Force",
-            $"Start-Process -FilePath '{executable}'");
-
-        var startInfo = new ProcessStartInfo("powershell.exe")
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        startInfo.ArgumentList.Add("-NoProfile");
-        startInfo.ArgumentList.Add("-WindowStyle");
-        startInfo.ArgumentList.Add("Hidden");
-        startInfo.ArgumentList.Add("-Command");
-        startInfo.ArgumentList.Add(command);
-
-        Process.Start(startInfo);
-
-        // 退出当前实例，把文件锁让给升级脚本。
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-        {
-            desktop.Shutdown();
-        }
-        else
-        {
-            Environment.Exit(0);
-        }
+        return ".zip";
     }
+
+    /// <summary>
+    /// 把已下载的升级包交给平台安装器：
+    /// Windows 解压覆盖安装目录并重启；Android 拉起系统安装器让用户确认。
+    /// </summary>
+    public void Install(string packagePath) => _installer.Install(packagePath);
 
     private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {

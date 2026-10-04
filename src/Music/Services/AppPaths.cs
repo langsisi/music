@@ -20,15 +20,26 @@ public static class AppPaths
     /// <summary>从标签中导出的封面文件目录。</summary>
     public static string CoversDir { get; } = Path.Combine(Root, "covers");
 
+    /// <summary>在线刮削得到的歌词缓存目录。</summary>
+    public static string LyricsDir { get; } = Path.Combine(Root, "lyrics");
+
+    /// <summary>「下载」把曲目另存到的用户可见目录：系统音乐库，不可用时退回应用数据目录。</summary>
+    public static string DownloadDir { get; } = ResolveDownloadDir();
+
     public static string SettingsFile { get; } = Path.Combine(Root, "settings.json");
 
     public static string LibraryDbPath { get; } = Path.Combine(Root, "library.db");
+
+    /// <summary>某曲目刮削歌词的本地缓存路径（曲目 Id 含冒号，需替换为合法文件名字符）。</summary>
+    public static string LyricsFileFor(string trackId)
+        => Path.Combine(LyricsDir, trackId.Replace(':', '_').Replace('/', '_').Replace('\\', '_') + ".lrc");
 
     public static void EnsureCreated()
     {
         Directory.CreateDirectory(Root);
         Directory.CreateDirectory(CacheDir);
         Directory.CreateDirectory(CoversDir);
+        Directory.CreateDirectory(LyricsDir);
     }
 
     private static string ResolveRoot()
@@ -44,6 +55,21 @@ public static class AppPaths
             "Music");
 
         return IsWritable(preferred) ? preferred : Path.Combine(Path.GetTempPath(), "Music");
+    }
+
+    /// <summary>
+    /// 下载目录优先用系统音乐库（用户在自己的「音乐」里就能找到已下载的歌），
+    /// 某些平台（如 Android 受限存储）不可写时退回应用数据目录。
+    /// </summary>
+    private static string ResolveDownloadDir()
+    {
+        var music = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+        if (!string.IsNullOrWhiteSpace(music) && IsWritable(music))
+        {
+            return music;
+        }
+
+        return Path.Combine(Root, "Downloads");
     }
 
     private static bool IsWritable(string directory)

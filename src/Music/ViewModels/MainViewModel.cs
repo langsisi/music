@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Music.Controls;
 using Music.Models;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace Music.ViewModels;
 
@@ -18,7 +19,7 @@ public partial class MainViewModel : ViewModelBase
         PlayerViewModel player,
         Pages.HomeViewModel home,
         Pages.LibraryViewModel library,
-        Pages.SourcesViewModel sources,
+        Pages.DiscoverViewModel discover,
         Pages.SettingsViewModel settings)
     {
         Player = player;
@@ -27,7 +28,7 @@ public partial class MainViewModel : ViewModelBase
         [
             new NavigationItem { Title = "首页", Icon = AppIcons.Home, Page = home },
             new NavigationItem { Title = "音乐库", Icon = AppIcons.Library, Page = library },
-            new NavigationItem { Title = "音源", Icon = AppIcons.Sources, Page = sources },
+            new NavigationItem { Title = "发现", Icon = AppIcons.Explore, Page = discover },
             new NavigationItem { Title = "设置", Icon = AppIcons.Settings, Page = settings },
         ];
 
@@ -35,6 +36,18 @@ public partial class MainViewModel : ViewModelBase
 
         player.ExpandRequested += () => IsNowPlayingOpen = true;
         player.CollapseRequested += () => IsNowPlayingOpen = false;
+
+        // 首页歌单卡片点击后切到音乐库并应用对应筛选。
+        home.FavoritesRequested += () =>
+        {
+            library.SelectFavorites();
+            SelectedNavItem = NavItems.First(item => item.Page == library);
+        };
+        home.CategoryRequested += categoryId =>
+        {
+            library.SelectCategory(categoryId);
+            SelectedNavItem = NavItems.First(item => item.Page == library);
+        };
     }
 
     public PlayerViewModel Player { get; }

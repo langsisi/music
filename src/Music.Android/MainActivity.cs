@@ -1,4 +1,4 @@
-﻿using Android.App;
+using Android.App;
 using Android.Content.PM;
 using Avalonia;
 using Avalonia.Android;
@@ -6,7 +6,7 @@ using Avalonia.Android;
 namespace Music.Android;
 
 [Activity(
-    Label = "Music.Android",
+    Label = "ZMusic",
     Theme = "@style/MyTheme.NoActionBar",
     Icon = "@drawable/icon",
     MainLauncher = true,

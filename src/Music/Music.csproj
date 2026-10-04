@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <!-- 内置的在线升级配置（地址 + 只读令牌），编译进程序集，终端用户无需配置。 -->
+    <EmbeddedResource Include="update.config.json" LogicalName="Music.update.config.json" />
   </ItemGroup>
 
   <ItemGroup>

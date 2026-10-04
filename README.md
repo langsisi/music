@@ -209,6 +209,7 @@ dotnet publish src\Music.Desktop -c Release -f net10.0-windows10.0.19041.0 `
 2. 在 GitCode 用 Tag `v1.1.0` 新建 Release，上传 `artifacts\Music-1.1.0.zip`
 3. 提交并推送仓库根目录的 `latest.json`
 4. 应用「设置 → 在线升级 → 更新地址」填：`https://raw.gitcode.com/evoq58/music/raw/master/latest.json`
+5. **刚上传完要等一会儿**：GitCode 的 raw 与 Release 附件走 CDN，刚推送/刚上传时可能返回 403 / 404 或旧内容（实测踩过：清单已能推上去，但立刻检查更新会报 `403 (Forbidden)`，等几分钟就正常）。发布新版本后若客户端仍显示「已是最新版本」，多半也是缓存还没刷新。
 
 注意 GitCode 的 raw 直链要走**独立域名 `raw.gitcode.com`**（`gitcode.com/<owner>/<repo>/raw/...` 对非浏览器客户端会返回网页外壳而不是文件内容），格式为：
 
@@ -231,17 +232,148 @@ https://raw.gitcode.com/{owner}/{repo}/raw/{branch}/{path}
 
 ## Android
 
-Android 头已完成依赖注入接入与 libvlc 原生库引用（`VideoLAN.LibVLC.Android`），界面复用同一套 View 的自适应布局；但**尚未在本机编译验证过**，构建需要具备：
+Android 头已完成依赖注入接入与 libvlc 原生库引用（`VideoLAN.LibVLC.Android`），界面复用同一套 View 的自适应布局，**已实测可构建出可安装的 APK**。
 
-- `dotnet workload install android`
-- **Android SDK**（含 API 36 平台，可参考 <https://aka.ms/dotnet-android-install-sdk>）
-- **JDK 17+**（必须是完整 JDK，仅 JRE 不行；可设 `JavaSdkDirectory` 指定路径）
+### 前置条件
 
 ```powershell
-dotnet build src\Music.Android\Music.Android.csproj -f net10.0-android
+# 1) Android 工作负载
+dotnet workload install android
+
+# 2) JDK 17+（必须是完整 JDK，仅 JRE 不行）
+winget install Microsoft.OpenJDK.17
 ```
 
-注意：Android 上的 `UpdateService.CanSelfUpdate` 为 `false`（无法自我覆盖安装），升级走应用商店。`Music.Android` 已加入解决方案，因此 `dotnet build Music.slnx` 需要上述前置条件齐全；日常只构建桌面头即可。
+3) **Android SDK**：用 .NET 自带的安装目标下载，不要手动折腾命令行工具。注意 PowerShell 里 `-p:名字=值` **中间不能有空格**，值里含空格或变量时要把整个 `-p:...=...` 用双引号包起来：
+
+```powershell
+cd src\Music.Android
+dotnet build -t:InstallAndroidDependencies -f net10.0-android `
+    "-p:AndroidSdkDirectory=$env:LOCALAPPDATA\Android\Sdk" `
+    "-p:JavaSdkDirectory=C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot" `
+    -p:AcceptAndroidSDKLicenses=True
+```
+
+装完把路径固化成用户级环境变量（原本为空时属纯新增），之后就不用再带参数：
+
+```powershell
+[Environment]::SetEnvironmentVariable('ANDROID_HOME', "$env:LOCALAPPDATA\Android\Sdk", 'User')
+[Environment]::SetEnvironmentVariable('JAVA_HOME', 'C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot', 'User')
+```
+
+> 若安装目标报 `XA5300 找不到 Android SDK 目录` 或 `XARAT7001 NullReferenceException`，先确认 SDK 目录是否已经装好（它可能在报完这些警告之后才真正下载完）；目录里应有 `platforms\android-36`、`build-tools\36.0.0`、`platform-tools\adb.exe`、`licenses\android-sdk-license`。
+
+### 构建与安装
+
+```powershell
+# Debug（自动用调试密钥签名，可直接装机）
+# csproj 已默认按 arm64 真机构建（约 33MB，含 libvlc）
+dotnet build src\Music.Android\Music.Android.csproj -c Debug -f net10.0-android
+# 产物：src\Music.Android\bin\Debug\net10.0-android\<ApplicationId>-Signed.apk
+
+# 装到手机（需开 USB 调试）
+& "$env:ANDROID_HOME\platform-tools\adb.exe" install -r <apk路径>
+
+# 模拟器（x86_64 AVD）构建时改架构：
+dotnet build src\Music.Android\Music.Android.csproj -c Debug -f net10.0-android -p:RuntimeIdentifiers=android-x64
+```
+
+> ⚠️ **不要用单数 `-p:RuntimeIdentifier=...`**：`VideoLAN.LibVLC.Android` 的 targets 只认复数属性 `RuntimeIdentifiers`，用单数会构建出**缺 `libvlc.so`** 的 APK（能安装但无法播放）。csproj 里已固定 `<RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>`，正常 `dotnet build` 即可。
+
+**Release（分发给别人，必须自己签名）**：
+
+```powershell
+# 生成密钥库，一次即可，丢了就无法给同一个应用推更新
+keytool -genkeypair -v -keystore music.keystore -alias music -keyalg RSA -keysize 2048 -validity 10000
+
+dotnet publish src\Music.Android\Music.Android.csproj -c Release -f net10.0-android `
+    -p:AndroidKeyStore=true `
+    -p:AndroidSigningKeyStore=music.keystore `
+    -p:AndroidSigningKeyAlias=music `
+    -p:AndroidSigningKeyPass=你的密码 `
+    -p:AndroidSigningStorePass=你的密码
+```
+
+**架构不匹配装不上？** 手机（如三星 W24 等 arm64 真机）装 x86_64 包会报「32 位应用不兼容」——那其实是在提示 APK 里的原生库与手机 CPU 架构不符。默认构建已是 arm64，无需额外参数；若曾用模拟器参数构建过，重装前先重新执行上面的默认构建。
+
+### ApplicationId 怎么填
+
+当前值：`zhusl.music`。
+
+规则（Android 安装时会校验，不合法会报「解析软件包时出现问题」）：
+
+- 至少两段，用点分隔；
+- **每一段必须以字母开头**，只能含字母、数字、下划线；建议全小写（Java 包名约定）；
+- 建议用「域名反转」：域名 `example.com` → `com.example.app`。
+
+反例：`www.294713.xyz.music` 这种写法**构建能通过，但装到手机上会被系统拒绝**，因为 `294713` 这一段以数字开头。数字域名反转后如果出现数字开头的段，必须补一个字母，例如 `xyz.m294713.music`。
+
+> ⚠️ 这个值一旦分发出去就不能再改：改了就是另一个应用，用户无法覆盖升级、数据也不通用。
+
+### 签名是什么，为什么 Release 要自己签名
+
+Android 要求**每个 APK 都必须带签名才能安装**。签名在这里的作用不是加密，而是两件事：
+
+1. **完整性**：安装时系统用证书里的公钥校验 APK 有没有被改动过；
+2. **身份连续性**：系统靠签名判断「这个新版本是不是同一个开发者发的」。**同一个应用升级必须用同一个密钥签名**，否则系统拒绝覆盖安装（只能卸载重装，用户数据会丢）。
+
+因此：
+
+| | 用的密钥 | 能否分发 |
+|---|---|---|
+| Debug 包（`dotnet build`） | Android 自动生成的 `debug.keystore`（在 `%USERPROFILE%\.android\debug.keystore`） | ❌ 任何人的电脑都能生成同签名的包 |
+| Release 包（`dotnet publish`） | **你自己的 keystore** | ✅ |
+
+「Release 要自己签名」就是指：你要生成并保管好一个属于自己的 keystore，发布时把路径与密码传给构建（就是上面那段 `-p:AndroidSigning*`）。
+
+要点：
+
+- **keystore 文件和密码务必备份**，丢了就再也无法给这个应用推更新；
+- 不要把密码提交到仓库（上面示例是明文传参，正式项目应放 CI 的密钥里）；
+- `ApplicationId` 和签名密钥一旦分发就都不能再变。
+
+### 已知坑：Debug 包直接拷贝安装必闪退
+
+症状：`adb install` 或拷贝 APK 安装后一打开就退，`logcat -b crash` 里能看到
+
+```
+Abort message: 'No assemblies found in ... .__override__ ... Assuming this is part of Fast Deployment. Exiting...'
+```
+
+根因：Debug 构建默认走 **Fast Deployment**——托管 DLL 不打进 APK，而是构建部署时由 MSBuild 通过 adb 推到设备的 `.__override__` 目录。脱离开发机的安装方式缺了这一步，启动时找不到程序集就自杀退出。**csproj 已用 `<EmbedAssembliesIntoApk>True</EmbedAssembliesIntoApk>` 强制把 DLL 打进 APK**，因此本项目构建出的 Debug 包可直接安装运行；若删除该属性，就必须用 `dotnet build -t:Install` 或 VS 部署到设备。
+
+### 闪退了怎么排查
+
+**方式一（不用数据线）**：Android 头已经内置崩溃日志，会写到
+
+```
+/sdcard/Android/data/<包名>/files/crash.log
+```
+
+即 `Android/data/zhusl.music/files/crash.log`。注意 Android 11 起多数系统（含三星）不允许普通文件管理器进入 `Android/data`，最可靠的取法还是数据线 + 方式二的 adb：
+
+```powershell
+& $adb pull /sdcard/Android/data/zhusl.music/files/crash.log D:\crash.log
+```
+
+复现一次闪退后把这个文件发出来，堆栈里会直接指出是哪一行抛的。另注意：**native 崩溃（段错误）不会写入此文件**，文件不存在或为空时改用方式二抓 `logcat -b crash`，那里的 abort message / backtrace 对 native 崩溃是一锤定音的。
+
+**方式二（信息最全，需打开「开发者选项 → USB 调试」）**：
+
+```powershell
+$adb = "$env:ANDROID_HOME\platform-tools\adb.exe"
+& $adb logcat -c                      # 清空旧日志
+# 此时在手机上打开应用，等它闪退
+& $adb logcat -d | Select-String -Pattern "AndroidRuntime|DOTNET|mono|FATAL" | Select-Object -Last 60
+```
+
+`FATAL EXCEPTION` 及其后面的 `Caused by` 就是根因；`DOTNET` / `mono` 关键字下是托管层未捕获异常的堆栈。
+
+### 其它注意
+
+- 构建时有 `XA0141` 警告：libvlc 3.6.5 的 `libvlc.so` 未按 16KB 页对齐，Android 16 起会要求，属于上游 NuGet 包的问题，目前可忽略。
+- Android 上的 `UpdateService.CanSelfUpdate` 为 `false`（无法自我覆盖安装），升级走应用商店。
+- `Music.Android` 已加入解决方案，因此 `dotnet build Music.slnx` 需要上述前置条件齐全；日常只构建桌面头即可。
 
 ## 已知限制
 

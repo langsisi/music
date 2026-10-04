@@ -4,7 +4,6 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:pages="using:Music.ViewModels.Pages"
              xmlns:vm="using:Music.ViewModels"
-             xmlns:models="using:Music.Models"
              xmlns:controls="using:Music.Controls"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
              x:Class="Music.Views.Pages.LibraryView"
@@ -12,50 +11,68 @@
 
     <StackPanel Spacing="14">
 
-        <!-- 搜索 + 播放全部 -->
+        <!-- 搜索：全宽圆角填充搜索框（参考音流） -->
+        <Border Classes="searchbox">
+            <Grid ColumnDefinitions="Auto,*">
+                <Path Grid.Column="0" Data="{x:Static controls:AppIcons.Search}"
+                      Fill="{DynamicResource TextTertiaryBrush}"
+                      Width="20" Height="20" Stretch="Uniform"
+                      VerticalAlignment="Center" />
+                <TextBox Grid.Column="1"
+                         PlaceholderText="搜索曲目 / 艺术家 / 专辑"
+                         Text="{Binding SearchText}" />
+            </Grid>
+        </Border>
+
+        <!-- 收藏 / 分类筛选（横滑）+ 播放全部 / 删除分类 -->
         <Grid ColumnDefinitions="*,Auto">
-            <TextBox Grid.Column="0" Width="340" HorizontalAlignment="Left"
-                     PlaceholderText="搜索曲目 / 艺术家 / 专辑"
-                     Text="{Binding SearchText}" />
-            <Button Grid.Column="1" Classes="accent" Content="播放全部"
-                    VerticalAlignment="Center"
-                    IsVisible="{Binding HasTracks}"
-                    Command="{Binding PlayAllCommand}" />
+            <ScrollViewer Grid.Column="0"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled">
+                <ListBox Classes="chips"
+                         ItemsSource="{Binding Filters}"
+                         SelectedItem="{Binding SelectedFilter}">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="8" />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LibraryFilter">
+                            <TextBlock Text="{Binding Title}" FontSize="13" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </ScrollViewer>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                        VerticalAlignment="Center" Margin="10,0,0,0">
+                <Button Classes="accent small" Content="播放全部"
+                        MinWidth="88"
+                        IsVisible="{Binding HasTracks}"
+                        Command="{Binding PlayAllCommand}" />
+                <Button Classes="icon" Width="36" Height="36"
+                        ToolTip.Tip="删除当前分类"
+                        IsVisible="{Binding CanDeleteCategory}"
+                        Command="{Binding DeleteCategoryCommand}">
+                    <Path Data="{x:Static controls:AppIcons.Trash}"
+                          Fill="{DynamicResource TextTertiaryBrush}"
+                          Width="16" Height="16" Stretch="Uniform" />
+                </Button>
+            </StackPanel>
         </Grid>
 
-        <!-- 收藏 / 分类筛选 -->
-        <StackPanel Orientation="Horizontal" Spacing="10">
-            <ListBox Classes="chips"
-                     ItemsSource="{Binding Filters}"
-                     SelectedItem="{Binding SelectedFilter}">
-                <ListBox.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" Spacing="8" />
-                    </ItemsPanelTemplate>
-                </ListBox.ItemsPanel>
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:LibraryFilter">
-                        <TextBlock Text="{Binding Title}" FontSize="13" />
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-
-            <Button Classes="icon" VerticalAlignment="Center" ToolTip.Tip="删除当前分类"
-                    IsVisible="{Binding CanDeleteCategory}"
-                    Command="{Binding DeleteCategoryCommand}">
-                <Path Data="{x:Static controls:AppIcons.Trash}"
-                      Fill="{DynamicResource TextTertiaryBrush}"
-                      Width="16" Height="16" Stretch="Uniform" />
-            </Button>
-        </StackPanel>
-
-        <!-- 新建分类 -->
-        <StackPanel Orientation="Horizontal" Spacing="10">
-            <TextBox Width="200" PlaceholderText="新分类名称"
+        <!-- 新建分类：输入框与按钮之间留出间距 -->
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0" MaxWidth="340" Margin="0,0,10,0"
+                     MinHeight="38" VerticalAlignment="Center"
+                     PlaceholderText="新分类名称"
                      Text="{Binding NewCategoryName}" />
-            <Button Classes="ghost" Content="新建分类" VerticalAlignment="Center"
+            <Button Grid.Column="1" Classes="ghost" Content="新建分类" Height="38"
+                    MinWidth="88"
+                    VerticalAlignment="Center"
                     Command="{Binding CreateCategoryCommand}" />
-        </StackPanel>
+        </Grid>
 
         <Border Classes="card" Padding="8" IsVisible="{Binding !IsEmpty}">
             <ListBox ItemsSource="{Binding Tracks}"
@@ -127,7 +144,7 @@
                                     ToolTip.Tip="播放"
                                     Command="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).PlayTrackCommand}"
                                     CommandParameter="{Binding}">
-                                <Path Data="{x:Static controls:AppIcons.Play}"
+                                <Path Classes="playglyph" Data="{x:Static controls:AppIcons.Play}"
                                       Fill="{DynamicResource TextSecondaryBrush}"
                                       Width="18" Height="18" Stretch="Uniform" />
                             </Button>
@@ -145,7 +162,7 @@
                       Width="30" Height="30" HorizontalAlignment="Center" />
                 <TextBlock Text="曲库还是空的" HorizontalAlignment="Center"
                            Foreground="{DynamicResource TextSecondaryBrush}" />
-                <TextBlock Text="到「音源」页面添加一个文件夹并扫描" HorizontalAlignment="Center"
+                <TextBlock Text="到「设置 → 音源」添加一个文件夹并扫描" HorizontalAlignment="Center"
                            FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
             </StackPanel>
         </Border>

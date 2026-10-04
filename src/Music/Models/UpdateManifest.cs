@@ -17,5 +17,14 @@ public sealed class UpdateManifest
     /// <summary>包的 SHA256（十六进制，大小写不敏感）。为空则跳过校验。</summary>
     public string? Sha256 { get; set; }
 
+    /// <summary>
+    /// Android 安装包（.apk）地址。Android 端优先用它，为空则回退到 <see cref="Url"/>；
+    /// 桌面端始终用 <see cref="Url"/>（zip）。
+    /// </summary>
+    public string? AndroidUrl { get; set; }
+
+    /// <summary>Android 包的 SHA256，为空则回退到 <see cref="Sha256"/>。</summary>
+    public string? AndroidSha256 { get; set; }
+
     public string? Notes { get; set; }
 }

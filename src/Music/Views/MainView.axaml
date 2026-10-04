@@ -10,7 +10,24 @@
              x:Class="Music.Views.MainView"
              x:DataType="vm:MainViewModel">
 
-    <Grid RowDefinitions="*,Auto,Auto" Background="{DynamicResource AppBackgroundBrush}">
+    <Grid RowDefinitions="*,Auto,Auto" Background="{DynamicResource AppBackgroundBrush}"
+          Classes.compact="{Binding IsCompact}">
+
+        <!-- 页头与内容区的留白按断点切换：桌面 28，手机（~344 DIP 宽）16，避免边距占比过高。 -->
+        <Grid.Styles>
+            <Style Selector="StackPanel.pagehead">
+                <Setter Property="Margin" Value="28,26,28,14" />
+            </Style>
+            <Style Selector="ScrollViewer.pagebody">
+                <Setter Property="Padding" Value="28,0,28,28" />
+            </Style>
+            <Style Selector="Grid.compact StackPanel.pagehead">
+                <Setter Property="Margin" Value="16,18,16,10" />
+            </Style>
+            <Style Selector="Grid.compact ScrollViewer.pagebody">
+                <Setter Property="Padding" Value="16,0,16,20" />
+            </Style>
+        </Grid.Styles>
 
         <!-- ==================== 主区域：导航 + 内容 ==================== -->
         <Grid Grid.Row="0" ColumnDefinitions="Auto,*">
@@ -60,13 +77,13 @@
 
             <!-- 内容区：外壳提供统一的页头，页面只负责自己的内容 -->
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
-                <StackPanel Grid.Row="0" Margin="28,26,28,14" Spacing="4">
+                <StackPanel Grid.Row="0" Classes="pagehead" Spacing="4">
                     <TextBlock Classes="h1" Text="{Binding CurrentPage.Title}" />
                     <TextBlock Classes="muted" TextWrapping="Wrap"
                                Text="{Binding CurrentPage.Description}" />
                 </StackPanel>
 
-                <ScrollViewer Grid.Row="1" Padding="28,0,28,28"
+                <ScrollViewer Grid.Row="1" Classes="pagebody"
                               HorizontalScrollBarVisibility="Disabled">
                     <ContentControl Content="{Binding CurrentPage}" />
                 </ScrollViewer>

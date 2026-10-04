@@ -3,10 +3,18 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:Music.ViewModels"
+             xmlns:views="using:Music.Views"
              xmlns:controls="using:Music.Controls"
              mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="760"
              x:Class="Music.Views.NowPlayingView"
              x:DataType="vm:MainViewModel">
+
+    <UserControl.Styles>
+        <!-- 队列当前行高亮 -->
+        <Style Selector="Grid.queueitem.current">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+        </Style>
+    </UserControl.Styles>
 
     <!-- 全屏「正在播放」：覆盖整个外壳，背景不透明以拦截下层交互 -->
     <Grid RowDefinitions="Auto,Auto,*,Auto" Background="{DynamicResource AppBackgroundBrush}">
@@ -16,20 +24,32 @@
                 Opacity="0.22" Background="{StaticResource AccentGradientBrush}" />
 
         <!-- ============ 顶部栏 ============ -->
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="12,14">
+        <!-- 图标 Path 的宽高必须与图形自身宽高比一致：Avalonia 的 Stretch=Uniform 会把缩放后的
+             图形贴在方框左上角而非居中，方框比例与图形不同时，窄/扁图形就会明显偏移。 -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="12,14">
             <Button Grid.Column="0" Classes="icon"
                     Command="{Binding Player.CollapseCommand}"
                     ToolTip.Tip="收起">
                 <Path Data="{x:Static controls:AppIcons.ChevronDown}"
                       Fill="{DynamicResource TextPrimaryBrush}"
-                      Width="22" Height="22" Stretch="Uniform" />
+                      Width="20" Height="12.35" Stretch="Uniform" />
             </Button>
             <TextBlock Grid.Column="1" Text="正在播放" Classes="section"
                        HorizontalAlignment="Center" VerticalAlignment="Center" />
-            <Button Grid.Column="2" Classes="icon">
-                <Path Data="{x:Static controls:AppIcons.Queue}"
+            <Button Grid.Column="2" Classes="icon toggle"
+                    Classes.active="{Binding Player.IsFavorite}"
+                    Command="{Binding Player.ToggleFavoriteCommand}"
+                    ToolTip.Tip="收藏">
+                <Path Data="{Binding Player.FavoriteIcon}"
+                      Fill="{Binding $parent[Button].Foreground}"
+                      Width="20" Height="18.35" Stretch="Uniform" />
+            </Button>
+            <Button Grid.Column="3" Classes="icon"
+                    Command="{Binding Player.OpenTrackActionsCommand}"
+                    ToolTip.Tip="更多操作">
+                <Path Data="{x:Static controls:AppIcons.MoreVertical}"
                       Fill="{DynamicResource TextPrimaryBrush}"
-                      Width="20" Height="20" Stretch="Uniform" />
+                      Width="5" Height="20" Stretch="Uniform" />
             </Button>
         </Grid>
 
@@ -95,7 +115,7 @@
                           Width="26" Height="26" HorizontalAlignment="Center" />
                     <TextBlock Text="暂无歌词" HorizontalAlignment="Center"
                                Foreground="{DynamicResource TextSecondaryBrush}" />
-                    <TextBlock Text="把同名 .lrc 文件放在歌曲旁边即可显示"
+                    <TextBlock Text="右上角「更多」→ 歌词搜索，可联网获取封面与歌词"
                                HorizontalAlignment="Center" FontSize="12" TextWrapping="Wrap"
                                TextAlignment="Center"
                                Foreground="{DynamicResource TextTertiaryBrush}" />
@@ -121,10 +141,13 @@
             </Grid>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
-                <Button Classes="icon" Command="{Binding Player.ToggleShuffleCommand}">
-                    <Path Data="{x:Static controls:AppIcons.Shuffle}"
-                          Fill="{DynamicResource TextSecondaryBrush}"
-                          Width="20" Height="20" Stretch="Uniform" />
+                <!-- 播放模式：顺序 → 随机 → 列表循环 → 单曲循环，一个按钮循环切换 -->
+                <Button Classes="icon toggle" Classes.active="{Binding Player.IsPlayModeActive}"
+                        Command="{Binding Player.CyclePlayModeCommand}"
+                        ToolTip.Tip="{Binding Player.PlayModeText}">
+                    <Path Data="{Binding Player.PlayModeIcon}"
+                          Fill="{Binding $parent[Button].Foreground}"
+                          Width="26" Height="26" Stretch="Uniform" />
                 </Button>
                 <Button Classes="icon" Command="{Binding Player.PreviousCommand}">
                     <Path Data="{x:Static controls:AppIcons.SkipPrevious}"
@@ -133,7 +156,7 @@
                 </Button>
                 <Button Classes="icon primary" Width="60" Height="60" CornerRadius="30"
                         Command="{Binding Player.TogglePlayCommand}">
-                    <Path Data="{Binding Player.PlayPauseIcon}"
+                    <Path Classes="playglyph" Data="{Binding Player.PlayPauseIcon}"
                           Fill="White" Width="24" Height="24" Stretch="Uniform" />
                 </Button>
                 <Button Classes="icon" Command="{Binding Player.NextCommand}">
@@ -141,14 +164,259 @@
                           Fill="{DynamicResource TextPrimaryBrush}"
                           Width="26" Height="26" Stretch="Uniform" />
                 </Button>
-                <Button Classes="icon" Command="{Binding Player.ToggleFavoriteCommand}">
-                    <Path Data="{Binding Player.FavoriteIcon}"
-                          Fill="{DynamicResource TextSecondaryBrush}"
-                          Width="20" Height="20" Stretch="Uniform" />
+                <Button Classes="icon" Command="{Binding Player.ToggleQueueCommand}"
+                        ToolTip.Tip="播放列表">
+                    <!-- 宽高比要与图标几何一致（19:14），否则 Stretch=Uniform 会把图形贴到方框左上角而显得偏上。 -->
+                    <Path Data="{x:Static controls:AppIcons.Queue}"
+                          Fill="{DynamicResource TextPrimaryBrush}"
+                          Width="26" Height="19.16" Stretch="Uniform" />
                 </Button>
             </StackPanel>
 
         </StackPanel>
+
+        <!-- ============ 播放列表抽屉 ============ -->
+        <Grid Grid.Row="0" Grid.RowSpan="4" IsVisible="{Binding Player.IsQueueOpen}">
+
+            <!-- 遮罩：深色底放在 Border 上，Button 只负责接收点击 -->
+            <Border Background="#99000000">
+                <Button Classes="scrim" Command="{Binding Player.ToggleQueueCommand}"
+                        ToolTip.Tip="关闭播放列表" />
+            </Border>
+
+            <Border HorizontalAlignment="Right" Width="320"
+                    Background="{DynamicResource AppBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="1,0,0,0">
+                <Grid RowDefinitions="Auto,*">
+
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,12,8,8">
+                        <TextBlock Grid.Column="0" Text="播放列表" Classes="section"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="icon"
+                                Command="{Binding Player.ToggleQueueCommand}"
+                                ToolTip.Tip="关闭">
+                            <Path Data="{x:Static controls:AppIcons.Close}"
+                                  Fill="{DynamicResource TextPrimaryBrush}"
+                                  Width="18" Height="18" Stretch="Uniform" />
+                        </Button>
+                    </Grid>
+
+                    <ListBox Grid.Row="1" ItemsSource="{Binding Player.QueueItems}"
+                             Background="Transparent" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                            <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                                <Setter Property="Background" Value="Transparent" />
+                            </Style>
+                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+                                <Setter Property="Background" Value="Transparent" />
+                            </Style>
+                        </ListBox.Styles>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:QueueItemViewModel">
+                                <Button Classes="bare" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch" Padding="0"
+                                        Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).Player.PlayQueueItemCommand}"
+                                        CommandParameter="{Binding}">
+                                    <Grid Classes="queueitem" Classes.current="{Binding IsCurrent}"
+                                          ColumnDefinitions="Auto,*,Auto" Height="50" Margin="8,1">
+                                        <Border Grid.Column="0" Width="38" Height="38" CornerRadius="7"
+                                                ClipToBounds="True" VerticalAlignment="Center"
+                                                Background="{DynamicResource AccentSoftBrush}">
+                                            <Image Stretch="UniformToFill"
+                                                   Source="{Binding CoverPath, Converter={StaticResource PathToBitmap}}" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="10,0" Spacing="1"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DisplayTitle}" FontSize="13"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                                            <TextBlock Text="{Binding Subtitle}" FontSize="11.5"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{Binding DurationText}"
+                                                   FontSize="11.5" VerticalAlignment="Center"
+                                                   Margin="6,0,0,0"
+                                                   Foreground="{DynamicResource TextTertiaryBrush}" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ============ 曲目操作抽屉（三个点） ============ -->
+        <!-- 与「播放列表」抽屉同款：右侧滑出、遮罩点击关闭、头部有关闭按钮。 -->
+        <Grid Grid.Row="0" Grid.RowSpan="4" IsVisible="{Binding Player.IsTrackActionsOpen}">
+
+            <!-- 遮罩：深色底放在 Border 上，Button 只负责接收点击 -->
+            <Border Background="#99000000">
+                <Button Classes="scrim" Command="{Binding Player.CloseTrackActionsCommand}"
+                        ToolTip.Tip="关闭" />
+            </Border>
+
+            <Border HorizontalAlignment="Right" Width="320"
+                    Background="{DynamicResource AppBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="1,0,0,0">
+                <Grid RowDefinitions="Auto,*">
+
+                    <!-- 头部：标题 + 关闭 -->
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,12,8,8">
+                        <TextBlock Grid.Column="0" Text="更多操作" Classes="section"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="icon"
+                                Command="{Binding Player.CloseTrackActionsCommand}"
+                                ToolTip.Tip="关闭">
+                            <Path Data="{x:Static controls:AppIcons.Close}"
+                                  Fill="{DynamicResource TextPrimaryBrush}"
+                                  Width="18" Height="18" Stretch="Uniform" />
+                        </Button>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+
+                            <!-- 曲目头 -->
+                            <Grid ColumnDefinitions="Auto,*" Margin="16,4,16,14">
+                                <Border Grid.Column="0" Width="48" Height="48" CornerRadius="10"
+                                        ClipToBounds="True"
+                                        Background="{StaticResource AccentGradientBrush}">
+                                    <Image Stretch="UniformToFill"
+                                           Source="{Binding Player.CoverPath, Converter={StaticResource PathToBitmap}}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="3"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Player.Title}" FontWeight="SemiBold"
+                                               FontSize="15" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                                    <TextBlock Text="{Binding Player.Artist}" FontSize="12.5"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" />
+
+                            <!-- 主菜单：图标固定槽位（宽高比与几何一致），文字才能对齐 -->
+                            <StackPanel IsVisible="{Binding !Player.IsPlaylistPickerOpen}">
+                                <Button Classes="sheetitem" Command="{Binding Player.OpenPlaylistPickerCommand}">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Border Grid.Column="0" Width="24" Height="24"
+                                                VerticalAlignment="Center">
+                                            <Path Data="{x:Static controls:AppIcons.PlaylistAdd}"
+                                                  Fill="{DynamicResource TextSecondaryBrush}"
+                                                  Width="22" Height="15.4" Stretch="Uniform"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="添加到歌单" Margin="12,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+
+                                <Button Classes="sheetitem" Command="{Binding Player.DownloadTrackCommand}"
+                                        IsEnabled="{Binding Player.CanDownload}">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Border Grid.Column="0" Width="24" Height="24"
+                                                VerticalAlignment="Center">
+                                            <Path Data="{x:Static controls:AppIcons.Download}"
+                                                  Fill="{DynamicResource TextSecondaryBrush}"
+                                                  Width="18.1" Height="22" Stretch="Uniform"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="下载" Margin="12,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+
+                                <Button Classes="sheetitem" Command="{Binding Player.OpenMetadataSearchCommand}">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Border Grid.Column="0" Width="24" Height="24"
+                                                VerticalAlignment="Center">
+                                            <Path Data="{x:Static controls:AppIcons.Search}"
+                                                  Fill="{DynamicResource TextSecondaryBrush}"
+                                                  Width="22" Height="22" Stretch="Uniform"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="歌词搜索" Margin="12,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+
+                                <TextBlock Text="{Binding Player.TrackActionStatusText}"
+                                           Classes="muted" FontSize="12.5" Margin="16,10,16,0"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <!-- 添加到歌单 -->
+                            <StackPanel IsVisible="{Binding Player.IsPlaylistPickerOpen}">
+                                <Grid ColumnDefinitions="Auto,*" Margin="10,4,16,6">
+                                    <Button Grid.Column="0" Classes="icon"
+                                            Command="{Binding Player.ClosePlaylistPickerCommand}"
+                                            ToolTip.Tip="返回">
+                                        <Path Data="{x:Static controls:AppIcons.ChevronLeft}"
+                                              Fill="{DynamicResource TextPrimaryBrush}"
+                                              Width="12.35" Height="20" Stretch="Uniform" />
+                                    </Button>
+                                    <TextBlock Grid.Column="1" Text="添加到歌单" Classes="section"
+                                               Margin="4,0,0,0" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <ItemsControl ItemsSource="{Binding Player.Playlists}" Margin="0,0,0,4">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:PlaylistOptionViewModel">
+                                            <!-- 命令挂在视图模型上：本页 DataContext 是 MainViewModel，Player 才是 PlayerViewModel -->
+                                            <Button Classes="sheetitem"
+                                                    Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Player.TogglePlaylistCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Stretch">
+                                                    <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <Path Grid.Column="1"
+                                                          Data="{x:Static controls:AppIcons.Check}"
+                                                          Fill="{DynamicResource AccentBrush}"
+                                                          IsVisible="{Binding IsMember}"
+                                                          Width="20" Height="15.25" Stretch="Uniform"
+                                                          VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Grid ColumnDefinitions="*,Auto" Margin="16,8,16,0">
+                                    <TextBox Grid.Column="0" Text="{Binding Player.NewPlaylistName}"
+                                             PlaceholderText="新建歌单名称" />
+                                    <Button Grid.Column="1" Classes="ghost small" Margin="10,0,0,0"
+                                            Command="{Binding Player.CreatePlaylistCommand}"
+                                            Content="新建" />
+                                </Grid>
+
+                                <TextBlock Text="{Binding Player.TrackActionStatusText}"
+                                           Classes="muted" FontSize="12.5" Margin="16,10,16,0"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                        </StackPanel>
+                    </ScrollViewer>
+
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ============ 歌词搜索面板 ============ -->
+        <views:MetadataSearchPanel Grid.Row="0" Grid.RowSpan="4" DataContext="{Binding Player}" />
 
     </Grid>
 </UserControl>

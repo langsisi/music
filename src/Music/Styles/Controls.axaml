@@ -55,6 +55,23 @@
         <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}" />
     </Style>
 
+    <!-- ============ 开关型图标按钮（随机 / 循环） ============ -->
+    <!-- 图标 Fill 绑定按钮自身的 Foreground，所以激活态只需改 Foreground 就能整体变色，
+         点击后有明显反馈，用户不会觉得"没反应"。 -->
+    <Style Selector="Button.icon.toggle">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
+    <Style Selector="Button.icon.toggle.active">
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    </Style>
+
+    <!-- ============ 播放三角（光学居中） ============ -->
+    <!-- Stretch=Uniform 只把三角形的包围盒居中，而右向三角形视觉重心偏左，看起来仍偏左；
+         这里统一右移 2px 做光学补偿。所有播放按钮的三角形共用此类。 -->
+    <Style Selector="Path.playglyph">
+        <Setter Property="RenderTransform" Value="translate(2px, 0px)" />
+    </Style>
+
     <!-- ============ 主按钮（渐变强调色） ============ -->
     <Style Selector="Button.accent">
         <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}" />
@@ -134,22 +151,23 @@
         <Setter Property="Background" Value="Transparent" />
     </Style>
 
-    <!-- ============ 筛选标签（胶囊） ============ -->
+    <!-- ============ 筛选标签（胶囊，选中/未选中同一尺寸） ============ -->
     <Style Selector="ListBox.chips">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
     </Style>
     <Style Selector="ListBox.chips ListBoxItem">
-        <Setter Property="Padding" Value="14,7" />
-        <Setter Property="CornerRadius" Value="16" />
-        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="ListBox.chips ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="CornerRadius" Value="16" />
-        <Setter Property="Padding" Value="0" />
-        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
     </Style>
     <Style Selector="ListBox.chips ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
@@ -159,6 +177,51 @@
     </Style>
     <Style Selector="ListBox.chips ListBoxItem:selected">
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- ============ 遮罩按钮（浮层空白处的命中区域） ============ -->
+    <!-- 深色底由外层 Border 提供：Button 模板部件的背景着色在部分主题下不生效，
+         这里只保证按钮铺满整块区域且透明，从而可靠地接收点击。 -->
+    <Style Selector="Button.scrim">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.scrim /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.scrim:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.scrim:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!-- ============ 操作弹层菜单项（整行可点、无圆角、悬停整行变色） ============ -->
+    <Style Selector="Button.sheetitem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="20,14" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.sheetitem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="Button.sheetitem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    </Style>
+    <Style Selector="Button.sheetitem:disabled">
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
     </Style>
 
     <!-- ============ 滚动条瘦身 ============ -->
@@ -185,6 +248,20 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
     </Style>
 
+    <!-- 卡片式点击区：悬停底色圆角与内部卡片一致（默认 bare 是 10，卡片是 14） -->
+    <Style Selector="Button.cardhit /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="CornerRadius" Value="14" />
+    </Style>
+    <Style Selector="Button.cardhit:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="CornerRadius" Value="14" />
+    </Style>
+    <Style Selector="Button.cardhit.lg /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="CornerRadius" Value="18" />
+    </Style>
+    <Style Selector="Button.cardhit.lg:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="CornerRadius" Value="18" />
+    </Style>
+
     <!-- ============ 强调色圆形按钮（播放/暂停） ============ -->
     <Style Selector="Button.icon.primary">
         <Setter Property="Width" Value="44" />
@@ -198,6 +275,97 @@
     <Style Selector="Button.icon.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{StaticResource AccentGradientBrush}" />
         <Setter Property="Opacity" Value="0.88" />
+    </Style>
+
+    <!-- ============ 小尺寸按钮（窄屏行内操作） ============ -->
+    <Style Selector="Button.accent.small">
+        <Setter Property="Padding" Value="14,7" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="CornerRadius" Value="9" />
+    </Style>
+    <Style Selector="Button.ghost.small">
+        <Setter Property="Padding" Value="12,7" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="CornerRadius" Value="9" />
+    </Style>
+
+    <!-- ============ 输入框文字垂直居中（Fluent 默认文字贴顶） ============ -->
+    <Style Selector="TextBox">
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox /template/ TextPresenter#PART_TextPresenter">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ============ 圆角搜索框（搜索页风格：填充灰底 + 前置搜索图标） ============ -->
+    <Style Selector="Border.searchbox">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+        <Setter Property="CornerRadius" Value="24" />
+        <Setter Property="Height" Value="46" />
+        <Setter Property="Padding" Value="16,0" />
+    </Style>
+    <Style Selector="Border.searchbox TextBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <!-- ============ 设置页：分组标签 + 行（标签左、控件右） ============ -->
+    <Style Selector="TextBlock.group-label">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    </Style>
+
+    <Style Selector="Path.seticon">
+        <Setter Property="Width" Value="21" />
+        <Setter Property="Height" Value="21" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Fill" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- 卡片内一行：底部分隔线，最后一行加 .last 去掉 -->
+    <Style Selector="Border.setrow">
+        <Setter Property="Padding" Value="16,13" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="Border.setrow.last">
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- 可折叠分组：直接用 Fluent 内置 Expander，卡片提供底色，Expander 自身透明无边框 -->
+    <Style Selector="Expander.cardexpander">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="14" />
+    </Style>
+    <Style Selector="Expander.cardexpander /template/ ToggleButton#ExpanderHeader">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="16,13,4,13" />
+    </Style>
+    <Style Selector="Expander.cardexpander /template/ Border#ExpanderContent">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Expander.cardexpander:pointerover /template/ ToggleButton#ExpanderHeader">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+    </Style>
+
+    <!-- 折叠面板内的内嵌表单 -->
+    <Style Selector="Border.subpanel">
+        <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="14" />
+        <Setter Property="Margin" Value="12,0,12,12" />
     </Style>
 
 </Styles>

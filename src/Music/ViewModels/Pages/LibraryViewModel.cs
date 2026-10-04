@@ -54,6 +54,18 @@ public partial class LibraryViewModel : PageViewModel
     /// <summary>只有筛选到某个分类时才允许删除该分类。</summary>
     public bool CanDeleteCategory => SelectedFilter?.Kind == LibraryFilterKind.Category;
 
+    // ---------------- 供首页歌单跳转使用 ----------------
+
+    public void SelectAll()
+        => SelectedFilter = Filters.FirstOrDefault(filter => filter.Kind == LibraryFilterKind.All);
+
+    public void SelectFavorites()
+        => SelectedFilter = Filters.FirstOrDefault(filter => filter.Kind == LibraryFilterKind.Favorites);
+
+    public void SelectCategory(string categoryId)
+        => SelectedFilter = Filters.FirstOrDefault(filter => filter.CategoryId == categoryId)
+            ?? Filters.FirstOrDefault();
+
     [ObservableProperty]
     public partial string SearchText { get; set; } = string.Empty;
 

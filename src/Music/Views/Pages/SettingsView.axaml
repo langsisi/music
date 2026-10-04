@@ -9,142 +9,336 @@
              x:Class="Music.Views.Pages.SettingsView"
              x:DataType="pages:SettingsViewModel">
 
-    <StackPanel Spacing="16">
+    <!-- 设置项统一为「分组卡片」：标签靠左，值/控件靠右；复杂参数折叠展示。 -->
+    <StackPanel Spacing="20">
 
-        <!-- 外观 -->
-        <Border Classes="card">
-            <StackPanel Spacing="14">
-                <TextBlock Text="外观" Classes="h2" />
-                <Grid ColumnDefinitions="140,*">
-                    <TextBlock Grid.Column="0" Text="主题" Classes="muted"
-                               VerticalAlignment="Center" />
-                    <ComboBox Grid.Column="1" Width="200" HorizontalAlignment="Left"
-                              ItemsSource="{Binding ThemeOptions}"
-                              SelectedItem="{Binding SelectedTheme}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="models:ThemeOption">
-                                <TextBlock Text="{Binding Name}" />
+        <!-- ==================== 外观 ==================== -->
+        <StackPanel Spacing="8">
+            <TextBlock Text="外观" Classes="group-label" Margin="2,0,0,0" />
+            <Border Classes="card" Padding="0">
+                <Border Classes="setrow last">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Path Grid.Column="0" Classes="seticon"
+                              Data="{x:Static controls:AppIcons.Palette}"
+                              Margin="0,0,14,0" />
+                        <TextBlock Grid.Column="1" Text="主题" FontSize="15"
+                                   VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="2" MinWidth="132" HorizontalAlignment="Right"
+                                  ItemsSource="{Binding ThemeOptions}"
+                                  SelectedItem="{Binding SelectedTheme}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:ThemeOption">
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+                </Border>
+            </Border>
+        </StackPanel>
+
+        <!-- ==================== 音源 ==================== -->
+        <StackPanel Spacing="8">
+            <TextBlock Text="音源" Classes="group-label" Margin="2,0,0,0" />
+            <Border Classes="card" Padding="0">
+                <StackPanel>
+
+                    <!-- 头部：标题 + 添加按钮（弹出类型选择，不再摆三个大按钮） -->
+                    <Border Classes="setrow">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Path Grid.Column="0" Classes="seticon"
+                                  Data="{x:Static controls:AppIcons.Folder}"
+                                  Margin="0,0,14,0" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="音乐源" FontSize="15" />
+                                <TextBlock Text="{Binding Sources.Sources.Count, StringFormat='{}{0} 个音源'}"
+                                           FontSize="12" Classes="muted" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Classes="ghost small" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Data="{x:Static controls:AppIcons.Plus}"
+                                          Fill="{DynamicResource TextSecondaryBrush}"
+                                          Width="15" Height="15" Stretch="Uniform"
+                                          VerticalAlignment="Center" />
+                                    <TextBlock Text="添加" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuItem Header="本地文件夹"
+                                                  Command="{Binding Sources.AddLocalFolderCommand}" />
+                                        <MenuItem Header="FTP 服务器"
+                                                  Command="{Binding Sources.AddFtpCommand}" />
+                                        <MenuItem Header="Navidrome"
+                                                  Command="{Binding Sources.AddNavidromeCommand}" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- 已配置的音源 -->
+                    <ItemsControl ItemsSource="{Binding Sources.Sources}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:MusicSourceConfig">
+                                <Border Classes="setrow">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Path Grid.Column="0" Classes="seticon" Margin="0,0,14,0"
+                                              Data="{x:Static controls:AppIcons.Folder}"
+                                              IsVisible="{Binding !CanEdit}" />
+                                        <Path Grid.Column="0" Classes="seticon" Margin="0,0,14,0"
+                                              Data="{x:Static controls:AppIcons.Sources}"
+                                              IsVisible="{Binding CanEdit}" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="14.5"
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Summary}" FontSize="12"
+                                                       Classes="muted"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                                    Spacing="6" VerticalAlignment="Center"
+                                                    Margin="12,0,0,0">
+                                            <Button Classes="ghost small" Content="编辑"
+                                                    IsVisible="{Binding CanEdit}"
+                                                    Command="{Binding $parent[ItemsControl].((pages:SettingsViewModel)DataContext).Sources.EditSourceCommand}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Classes="ghost small" Content="同步"
+                                                    Command="{Binding $parent[ItemsControl].((pages:SettingsViewModel)DataContext).Sources.SyncCommand}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Classes="icon" Width="34" Height="34"
+                                                    ToolTip.Tip="移除音源"
+                                                    Command="{Binding $parent[ItemsControl].((pages:SettingsViewModel)DataContext).Sources.RemoveCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Path Data="{x:Static controls:AppIcons.Trash}"
+                                                      Fill="{DynamicResource TextTertiaryBrush}"
+                                                      Width="17" Height="17" Stretch="Uniform" />
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                </Grid>
-            </StackPanel>
-        </Border>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
-        <!-- 缓存 -->
-        <Border Classes="card">
-            <StackPanel Spacing="14">
-                <TextBlock Text="缓存" Classes="h2" />
-                <Grid ColumnDefinitions="140,*">
-                    <TextBlock Grid.Column="0" Text="缓存上限" Classes="muted"
-                               VerticalAlignment="Center" />
-                    <StackPanel Grid.Column="1" Spacing="4">
-                        <Slider Minimum="0" Maximum="10240"
-                                Value="{Binding CacheLimitMb}"
-                                HorizontalAlignment="Left" Width="320" />
-                        <TextBlock Text="{Binding CacheLimitText}" Classes="muted" FontSize="12" />
+                    <!-- 远程音源编辑表单（添加 FTP / Navidrome 后内联展开） -->
+                    <Border Classes="subpanel" IsVisible="{Binding Sources.IsEditorOpen}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="{Binding Sources.EditorTitle}" Classes="h2" FontSize="16" />
+
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="名称（可选）" Classes="section" />
+                                <TextBox Text="{Binding Sources.EditorName}" PlaceholderText="我的音乐库" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="{Binding Sources.AddressLabel}" Classes="section" />
+                                <TextBox Text="{Binding Sources.EditorAddress}"
+                                         PlaceholderText="{Binding Sources.AddressPlaceholder}" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="5" IsVisible="{Binding Sources.IsFtpEditor}">
+                                <TextBlock Text="端口" Classes="section" />
+                                <NumericUpDown Value="{Binding Sources.EditorPort}"
+                                               Minimum="1" Maximum="65535"
+                                               Increment="1" FormatString="0" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="5" IsVisible="{Binding Sources.IsFtpEditor}">
+                                <TextBlock Text="起始目录" Classes="section" />
+                                <TextBox Text="{Binding Sources.EditorRootPath}" PlaceholderText="/music" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="用户名" Classes="section" />
+                                <TextBox Text="{Binding Sources.EditorUser}" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="密码" Classes="section" />
+                                <TextBox Text="{Binding Sources.EditorPassword}" PasswordChar="●" />
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding Sources.EditorStatusText}" FontSize="12"
+                                       TextWrapping="Wrap" Classes="muted" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Classes="accent small" Content="保存并同步"
+                                        IsEnabled="{Binding !Sources.IsTesting}"
+                                        Command="{Binding Sources.SaveSourceCommand}" />
+                                <Button Classes="ghost small" Content="测试连接"
+                                        IsEnabled="{Binding !Sources.IsTesting}"
+                                        Command="{Binding Sources.TestConnectionCommand}" />
+                                <Button Classes="ghost small" Content="取消"
+                                        Command="{Binding Sources.CancelEditCommand}" />
+                            </StackPanel>
+
+                            <TextBlock FontSize="12" Classes="muted" TextWrapping="Wrap"
+                                       Text="密码以明文保存在本机设置文件中，仅用于向该服务器认证。" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 扫描进度 / 状态 -->
+                    <StackPanel IsVisible="{Binding Sources.IsBusy}" Spacing="8" Margin="16,12,16,14">
+                        <TextBlock Text="{Binding Sources.StatusText}" FontSize="12"
+                                   Classes="muted" />
+                        <ProgressBar Minimum="0" Maximum="100"
+                                     Value="{Binding Sources.ProgressValue}" />
                     </StackPanel>
-                </Grid>
-
-                <Grid ColumnDefinitions="140,*,Auto">
-                    <TextBlock Grid.Column="0" Text="当前占用" Classes="muted"
-                               VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{Binding CacheUsageText}"
-                               VerticalAlignment="Center" FontSize="13" />
-                    <Button Grid.Column="2" Classes="ghost" Content="清理缓存"
-                            Command="{Binding ClearCacheCommand}" />
-                </Grid>
-
-                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
-                           Text="播放过的网络曲目会写入缓存，再次播放直接复用，不再重新下载。" />
-            </StackPanel>
-        </Border>
-
-        <!-- 歌词广播 -->
-        <Border Classes="card">
-            <StackPanel Spacing="14">
-                <TextBlock Text="歌词广播" Classes="h2" />
-
-                <Grid ColumnDefinitions="140,*">
-                    <TextBlock Grid.Column="0" Text="开启广播" Classes="muted"
-                               VerticalAlignment="Center" />
-                    <ToggleSwitch Grid.Column="1" OnContent="已开启" OffContent="已关闭"
-                                  IsChecked="{Binding BroadcastEnabled}" />
-                </Grid>
-
-                <Grid ColumnDefinitions="140,*">
-                    <TextBlock Grid.Column="0" Text="端口" Classes="muted"
-                               VerticalAlignment="Center" />
-                    <NumericUpDown Grid.Column="1" Width="160" HorizontalAlignment="Left"
-                                   Minimum="1" Maximum="65535"
-                                   Value="{Binding BroadcastPort}" />
-                </Grid>
-
-                <TextBlock Text="{Binding BroadcastStatusText}" Classes="muted" FontSize="12"
-                           TextWrapping="Wrap" />
-                <TextBlock Text="{Binding BroadcastUrlText}" FontSize="12"
-                           FontFamily="Consolas,monospace"
-                           Foreground="{DynamicResource AccentBrush}"
-                           TextWrapping="Wrap" />
-
-                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
-                           Text="说明：蓝牙耳机/车机通过 AVRCP 只能拿到歌名、艺术家与封面，协议本身不承载歌词。逐行歌词通过上面的局域网地址广播给手机或外接小屏。" />
-            </StackPanel>
-        </Border>
-
-        <!-- 在线升级 -->
-        <Border Classes="card">
-            <StackPanel Spacing="14">
-                <TextBlock Text="在线升级" Classes="h2" />
-
-                <Grid ColumnDefinitions="140,*">
-                    <TextBlock Grid.Column="0" Text="当前版本" Classes="muted"
-                               VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{Binding VersionText}"
-                               VerticalAlignment="Center" FontSize="13" />
-                </Grid>
-
-                <Grid ColumnDefinitions="140,*">
-                    <TextBlock Grid.Column="0" Text="更新地址" Classes="muted"
-                               VerticalAlignment="Center" />
-                    <TextBox Grid.Column="1"
-                             PlaceholderText="https://example.com/music/latest.json"
-                             Text="{Binding UpdateFeedUrl}" />
-                </Grid>
-
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <Button Classes="accent" Content="检查更新"
-                            IsEnabled="{Binding !IsCheckingUpdate}"
-                            Command="{Binding CheckUpdateCommand}" />
-                    <Button Classes="ghost" Content="下载并安装"
-                            IsVisible="{Binding HasPendingUpdate}"
-                            IsEnabled="{Binding !IsCheckingUpdate}"
-                            Command="{Binding InstallUpdateCommand}" />
+                    <TextBlock Text="{Binding Sources.StatusText}" FontSize="12"
+                               Classes="muted" TextWrapping="Wrap"
+                               IsVisible="{Binding !Sources.IsBusy}"
+                               Margin="16,0,16,14" />
                 </StackPanel>
+            </Border>
+        </StackPanel>
 
-                <TextBlock Text="{Binding UpdateStatusText}" Classes="muted" FontSize="12"
-                           TextWrapping="Wrap" />
+        <!-- ==================== 缓存（折叠） ==================== -->
+        <StackPanel Spacing="8">
+            <TextBlock Text="缓存" Classes="group-label" Margin="2,0,0,0" />
+            <Border Classes="card" Padding="0">
+                <Expander Classes="cardexpander">
+                    <Expander.Header>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Path Grid.Column="0" Classes="seticon"
+                                  Data="{x:Static controls:AppIcons.Storage}"
+                                  Margin="0,0,14,0" />
+                            <TextBlock Grid.Column="1" Text="播放缓存" FontSize="15"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="{Binding CacheLimitText}"
+                                       FontSize="12.5" Classes="muted"
+                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                        </Grid>
+                    </Expander.Header>
 
-                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
-                           IsVisible="{Binding CanSelfUpdate}"
-                           Text="更新地址需返回 JSON：{ &quot;version&quot;: &quot;1.1.0&quot;, &quot;url&quot;: &quot;Music-1.1.0.zip&quot;, &quot;sha256&quot;: &quot;可选校验值&quot;, &quot;notes&quot;: &quot;更新说明&quot; }。url 可写完整地址，也可写相对清单所在目录的文件名。安装包解压后覆盖当前安装目录并自动重启。" />
+                    <StackPanel Margin="0,0,0,8">
+                        <Grid ColumnDefinitions="Auto,*" Margin="16,4,16,0">
+                            <TextBlock Grid.Column="0" Text="缓存上限" Classes="muted"
+                                       VerticalAlignment="Center" Margin="0,0,14,0" />
+                            <Slider Grid.Column="1" Minimum="0" Maximum="10"
+                                    TickFrequency="0.2" IsSnapToTickEnabled="True"
+                                    Value="{Binding CacheLimitGb}"
+                                    Margin="0,0,10,0" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0,16,0">
+                            <TextBlock Grid.Column="0" Text="0 GB（不缓存）" FontSize="11"
+                                       Classes="muted" />
+                            <TextBlock Grid.Column="2" Text="10 GB" FontSize="11"
+                                       Classes="muted" />
+                        </Grid>
+                        <Border Classes="setrow" Margin="12,8,12,0" CornerRadius="10">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="{Binding CacheUsageText}"
+                                           FontSize="13" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Classes="ghost small" Content="清理缓存"
+                                        HorizontalAlignment="Right"
+                                        Command="{Binding ClearCacheCommand}" />
+                            </Grid>
+                        </Border>
+                        <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                                   Margin="16,10,16,8"
+                                   Text="播放过的网络曲目会写入缓存，再次播放直接复用，不再重新下载。上限调为 0 表示不缓存。" />
+                    </StackPanel>
+                </Expander>
+            </Border>
+        </StackPanel>
 
-                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
-                           IsVisible="{Binding !CanSelfUpdate}"
-                           Text="当前平台不支持自我覆盖安装，请通过应用商店升级。" />
-            </StackPanel>
-        </Border>
+        <!-- ==================== 歌词广播（折叠） ==================== -->
+        <StackPanel Spacing="8">
+            <TextBlock Text="歌词广播" Classes="group-label" Margin="2,0,0,0" />
+            <Border Classes="card" Padding="0">
+                <Expander Classes="cardexpander">
+                    <Expander.Header>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Path Grid.Column="0" Classes="seticon"
+                                  Data="{x:Static controls:AppIcons.Cast}"
+                                  Margin="0,0,14,0" />
+                            <TextBlock Grid.Column="1" Text="歌词广播" FontSize="15"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding BroadcastStatusSummary}"
+                                       FontSize="12.5" Classes="muted"
+                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                        </Grid>
+                    </Expander.Header>
 
-        <!-- 关于 -->
-        <Border Classes="card">
-            <StackPanel Spacing="10">
-                <TextBlock Text="关于" Classes="h2" />
-                <Grid ColumnDefinitions="140,*">
-                    <TextBlock Grid.Column="0" Text="版本" Classes="muted" />
-                    <TextBlock Grid.Column="1" Text="{Binding VersionText}" />
-                </Grid>
-            </StackPanel>
-        </Border>
+                    <StackPanel Margin="0,0,0,8">
+                        <Grid ColumnDefinitions="*,Auto" Margin="16,6,16,0">
+                            <TextBlock Grid.Column="0" Text="开启广播" FontSize="14"
+                                       VerticalAlignment="Center" />
+                            <ToggleSwitch Grid.Column="1" OnContent="已开启" OffContent="已关闭"
+                                          IsChecked="{Binding BroadcastEnabled}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" Margin="16,10,16,0">
+                            <TextBlock Grid.Column="0" Text="端口" Classes="muted"
+                                       VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Column="1" Width="160" HorizontalAlignment="Right"
+                                           Minimum="1" Maximum="65535"
+                                           Value="{Binding BroadcastPort}" />
+                        </Grid>
+
+                        <TextBlock Text="{Binding BroadcastStatusText}" Classes="muted" FontSize="12"
+                                   TextWrapping="Wrap" Margin="16,12,16,0" />
+                        <TextBlock Text="{Binding BroadcastUrlText}" FontSize="12"
+                                   FontFamily="Consolas,monospace"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   TextWrapping="Wrap" Margin="16,4,16,0" />
+                        <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                                   Margin="16,10,16,0"
+                                   Text="开启后，播放时会把当前歌词行写入系统媒体信息的「专辑」字段，蓝牙耳机 / 车机屏幕可逐行显示歌词（音流同款做法）；同时在下面的局域网地址提供网页滚动歌词。未播放到歌词行时仍显示真实专辑名。" />
+                    </StackPanel>
+                </Expander>
+            </Border>
+        </StackPanel>
+
+        <!-- ==================== 在线升级（折叠） ==================== -->
+        <StackPanel Spacing="8">
+            <TextBlock Text="关于" Classes="group-label" Margin="2,0,0,0" />
+            <Border Classes="card" Padding="0">
+                <Expander Classes="cardexpander">
+                    <Expander.Header>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Path Grid.Column="0" Classes="seticon"
+                                  Data="{x:Static controls:AppIcons.Refresh}"
+                                  Margin="0,0,14,0" />
+                            <TextBlock Grid.Column="1" Text="在线升级" FontSize="15"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="{Binding VersionText}"
+                                       FontSize="12.5" Classes="muted"
+                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                        </Grid>
+                    </Expander.Header>
+
+                    <StackPanel Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal" Spacing="10" Margin="16,6,16,0">
+                            <Button Classes="accent small" Content="检查更新"
+                                    IsEnabled="{Binding !IsCheckingUpdate}"
+                                    Command="{Binding CheckUpdateCommand}" />
+                            <Button Classes="ghost small" Content="下载并安装"
+                                    IsVisible="{Binding HasPendingUpdate}"
+                                    IsEnabled="{Binding !IsCheckingUpdate}"
+                                    Command="{Binding InstallUpdateCommand}" />
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding UpdateStatusText}" Classes="muted" FontSize="12"
+                                   TextWrapping="Wrap" Margin="16,10,16,0" />
+
+                        <!-- 检查到新版本后显示该版本的更新内容 -->
+                        <StackPanel Spacing="5" Margin="16,12,16,0"
+                                    IsVisible="{Binding HasPendingUpdate}">
+                            <TextBlock Text="更新内容" Classes="section" />
+                            <TextBlock Text="{Binding UpdateNotesText}" Classes="muted"
+                                       FontSize="12.5" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                                   IsVisible="{Binding !CanSelfUpdate}"
+                                   Margin="16,10,16,0"
+                                   Text="当前平台未实现应用内自更新，请手动安装新版本。" />
+                    </StackPanel>
+                </Expander>
+            </Border>
+        </StackPanel>
 
     </StackPanel>
 </UserControl>

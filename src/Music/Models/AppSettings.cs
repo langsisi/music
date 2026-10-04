@@ -18,9 +18,6 @@ public sealed class AppSettings
 
     public int BroadcastPort { get; set; } = 8765;
 
-    /// <summary>在线升级的版本清单地址（返回 <see cref="UpdateManifest"/> 的 JSON）。为空表示不检查更新。</summary>
-    public string UpdateFeedUrl { get; set; } = string.Empty;
-
     [JsonPropertyName("sources")]
     public ObservableCollection<MusicSourceConfig> Sources { get; set; } = [];
 

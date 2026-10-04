@@ -26,12 +26,14 @@ public partial class SettingsViewModel : PageViewModel
         ISettingsStore settings,
         IAudioCache cache,
         LyricsBroadcastServer broadcast,
-        UpdateService updates)
+        UpdateService updates,
+        SourcesViewModel sources)
     {
         _settings = settings;
         _cache = cache;
         _broadcast = broadcast;
         _updates = updates;
+        Sources = sources;
 
         ThemeOptions =
         [
@@ -46,7 +48,6 @@ public partial class SettingsViewModel : PageViewModel
         CacheLimitMb = settings.Current.CacheLimitMb;
         BroadcastEnabled = settings.Current.BroadcastEnabled;
         BroadcastPort = settings.Current.BroadcastPort;
-        UpdateFeedUrl = settings.Current.UpdateFeedUrl;
         _loading = false;
 
         _ = RefreshCacheStatsAsync();
@@ -54,6 +55,9 @@ public partial class SettingsViewModel : PageViewModel
     }
 
     public override string Title => "设置";
+
+    /// <summary>音源管理已并入设置页。</summary>
+    public SourcesViewModel Sources { get; }
 
     // ---------------- 外观 ----------------
 
@@ -83,6 +87,7 @@ public partial class SettingsViewModel : PageViewModel
     partial void OnCacheLimitMbChanged(double value)
     {
         OnPropertyChanged(nameof(CacheLimitText));
+        OnPropertyChanged(nameof(CacheLimitGb));
         if (_loading)
         {
             return;
@@ -93,6 +98,17 @@ public partial class SettingsViewModel : PageViewModel
 
         // 调小上限时立即生效，不需要等下次播放。
         _ = ApplyLimitAsync();
+    }
+
+    /// <summary>缓存上限（GB），滑条按 0.2 GB 步进。</summary>
+    public double CacheLimitGb
+    {
+        get => CacheLimitMb / 1024.0;
+        set
+        {
+            var snapped = Math.Round(value / 0.2) * 0.2;
+            CacheLimitMb = snapped * 1024.0;
+        }
     }
 
     public string CacheLimitText => CacheLimitMb <= 0
@@ -126,6 +142,8 @@ public partial class SettingsViewModel : PageViewModel
 
     partial void OnBroadcastEnabledChanged(bool value)
     {
+        OnPropertyChanged(nameof(BroadcastStatusSummary));
+
         if (_loading)
         {
             return;
@@ -135,6 +153,9 @@ public partial class SettingsViewModel : PageViewModel
         Save();
         ApplyBroadcast();
     }
+
+    /// <summary>折叠头部右侧的摘要。</summary>
+    public string BroadcastStatusSummary => BroadcastEnabled ? "已开启" : "已关闭";
 
     [ObservableProperty]
     public partial decimal? BroadcastPort { get; set; }
@@ -167,21 +188,6 @@ public partial class SettingsViewModel : PageViewModel
 
     // ---------------- 在线升级 ----------------
 
-    /// <summary>版本清单地址，返回形如 {"version":"1.1.0","url":"...","sha256":"..."} 的 JSON。</summary>
-    [ObservableProperty]
-    public partial string UpdateFeedUrl { get; set; } = string.Empty;
-
-    partial void OnUpdateFeedUrlChanged(string value)
-    {
-        if (_loading)
-        {
-            return;
-        }
-
-        _settings.Current.UpdateFeedUrl = value?.Trim() ?? string.Empty;
-        Save();
-    }
-
     [ObservableProperty]
     public partial string UpdateStatusText { get; set; } = "尚未检查更新。";
 
@@ -193,12 +199,21 @@ public partial class SettingsViewModel : PageViewModel
     public partial UpdateManifest? PendingUpdate { get; set; }
 
     partial void OnPendingUpdateChanged(UpdateManifest? value)
-        => OnPropertyChanged(nameof(HasPendingUpdate));
+    {
+        OnPropertyChanged(nameof(HasPendingUpdate));
+        OnPropertyChanged(nameof(UpdateNotesText));
+    }
 
     public bool HasPendingUpdate => PendingUpdate is not null;
 
-    /// <summary>Android 等平台不能自我覆盖安装。</summary>
-    public bool CanSelfUpdate => UpdateService.CanSelfUpdate;
+    /// <summary>待升级版本的更新内容；清单没写说明时给一句提示，避免空白。</summary>
+    public string UpdateNotesText =>
+        string.IsNullOrWhiteSpace(PendingUpdate?.Notes)
+            ? "本次更新没有提供说明。"
+            : PendingUpdate!.Notes!;
+
+    /// <summary>当前平台是否支持应用内自更新（由平台安装器决定）。</summary>
+    public bool CanSelfUpdate => _updates.CanSelfUpdate;
 
     [RelayCommand]
     private async Task CheckUpdateAsync()
@@ -239,8 +254,10 @@ public partial class SettingsViewModel : PageViewModel
 
             var package = await _updates.DownloadAsync(manifest, progress);
 
-            UpdateStatusText = "下载完成，正在重启应用以完成升级…";
-            _updates.ApplyAndRestart(package);
+            UpdateStatusText = OperatingSystem.IsAndroid()
+                ? "下载完成，正在打开系统安装界面…"
+                : "下载完成，正在重启应用以完成升级…";
+            _updates.Install(package);
         }
         catch (Exception ex)
         {

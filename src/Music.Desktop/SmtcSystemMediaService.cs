@@ -14,7 +14,8 @@ namespace Music.Desktop;
 /// </summary>
 /// <remarks>
 /// 说明两点限制：
-/// 1. SMTC / AVRCP 协议本身不承载歌词，逐行歌词由内置广播服务提供。
+/// 1. SMTC / AVRCP 协议本身不承载歌词，逐行歌词由内置广播服务提供；
+///    开启广播时当前歌词行也会写入专辑字段，推给蓝牙耳机/车机显示。
 /// 2. 未打包（非 MSIX）应用在部分 Windows 版本上会话可见性不保证，
 ///    因此这里全部用 try/catch 包裹，失败时静默降级，不影响播放。
 /// </remarks>
@@ -22,6 +23,8 @@ public sealed class SmtcSystemMediaService : ISystemMediaService
 {
     private SystemMediaTransportControls? _controls;
     private bool _unavailable;
+    private string? _currentLine;
+    private string _lastAlbum = string.Empty;
 
     public event EventHandler<MediaControlCommand>? CommandReceived;
 
@@ -35,11 +38,13 @@ public sealed class SmtcSystemMediaService : ISystemMediaService
 
         try
         {
+            _lastAlbum = info.Album;
+
             var updater = controls.DisplayUpdater;
             updater.Type = MediaPlaybackType.Music;
             updater.MusicProperties.Title = info.Title;
             updater.MusicProperties.Artist = info.Artist;
-            updater.MusicProperties.AlbumTitle = info.Album;
+            updater.MusicProperties.AlbumTitle = _currentLine ?? info.Album;
 
             if (!string.IsNullOrWhiteSpace(info.CoverPath) && System.IO.File.Exists(info.CoverPath))
             {
@@ -64,6 +69,28 @@ public sealed class SmtcSystemMediaService : ISystemMediaService
         }
     }
 
+    public void UpdateLine(string? line)
+    {
+        _currentLine = string.IsNullOrWhiteSpace(line) ? null : line;
+
+        var controls = EnsureControls();
+        if (controls is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // 把当前歌词行（或恢复后的真实专辑名）写进专辑字段再刷新。
+            controls.DisplayUpdater.MusicProperties.AlbumTitle = _currentLine ?? _lastAlbum;
+            controls.DisplayUpdater.Update();
+        }
+        catch (Exception)
+        {
+            // 忽略，歌词不影响播放。
+        }
+    }
+
     public void Clear()
     {
         if (_controls is null)
@@ -73,6 +100,7 @@ public sealed class SmtcSystemMediaService : ISystemMediaService
 
         try
         {
+            _currentLine = null;
             _controls.PlaybackStatus = MediaPlaybackStatus.Stopped;
             _controls.DisplayUpdater.ClearAll();
         }

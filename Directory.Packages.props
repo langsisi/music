@@ -32,6 +32,9 @@
 
         <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
 
+        <!-- Windows 上用 DPAPI 加密私有仓库令牌 -->
+        <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
+
         <PackageVersion Include="Xamarin.AndroidX.Core.SplashScreen" Version="1.0.1.15" />
     </ItemGroup>
 </Project>
