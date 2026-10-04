@@ -23,4 +23,10 @@ public sealed class AppSettings
 
     /// <summary>上次播放的曲目 Id，用于启动时恢复。</summary>
     public string? LastTrackId { get; set; }
+
+    /// <summary>
+    /// 是否已把平台注入的默认目录（Android 的本机音乐 / 下载目录）播种为本地音源。
+    /// 只播种一次，用户手动删除后不再自动加回来。
+    /// </summary>
+    public bool DefaultLocalFoldersSeeded { get; set; }
 }

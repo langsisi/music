@@ -28,6 +28,10 @@ namespace Music.Android
             AndroidEnvironment.UnhandledExceptionRaiser += (_, e) =>
                 WriteCrashLog("Android", e.Exception);
 
+            // 必须早于 base.OnCreate：Avalonia 初始化（含 AppPaths 静态初始化）发生在其内部，
+            // 而默认本地音源目录要靠这里注入的环境变量。
+            PlatformPaths.Configure();
+
             base.OnCreate();
         }
 

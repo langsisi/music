@@ -27,14 +27,23 @@ public sealed class JsonSettingsStore : ISettingsStore
                 return;
             }
 
-            await using var stream = File.OpenRead(AppPaths.SettingsFile);
-            var loaded = await JsonSerializer
-                .DeserializeAsync(stream, SettingsJsonContext.Default.AppSettings, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (loaded is not null)
+            // 不能使用 await using：它生成的 DisposeAsync 不带 ConfigureAwait(false)，
+            // 而调用方可能在 UI 线程上用 GetAwaiter().GetResult() 同步等待，会与此处互锁。
+            var stream = File.OpenRead(AppPaths.SettingsFile);
+            try
             {
-                Current = loaded;
+                var loaded = await JsonSerializer
+                    .DeserializeAsync(stream, SettingsJsonContext.Default.AppSettings, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (loaded is not null)
+                {
+                    Current = loaded;
+                }
+            }
+            finally
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
             }
         }
         catch (Exception)
@@ -57,11 +66,18 @@ public sealed class JsonSettingsStore : ISettingsStore
 
             // 先写临时文件再替换，避免写入中断导致设置文件损坏。
             var tempFile = AppPaths.SettingsFile + ".tmp";
-            await using (var stream = File.Create(tempFile))
+
+            // 同上：显式 try/finally 代替 await using，保证 DisposeAsync 不捕获同步上下文。
+            var stream = File.Create(tempFile);
+            try
             {
                 await JsonSerializer
                     .SerializeAsync(stream, Current, SettingsJsonContext.Default.AppSettings, cancellationToken)
                     .ConfigureAwait(false);
+            }
+            finally
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
             }
 
             File.Move(tempFile, AppPaths.SettingsFile, overwrite: true);

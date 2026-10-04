@@ -24,7 +24,12 @@ public partial class App : Application
         }
 
 #if DEBUG
-        this.AttachDeveloperTools();
+        // 仅桌面端附加 DevTools：Android/iOS 真机上找不到 DevTools 宿主时会抛
+        // DevToolsUnreachableException（主线程），表现为启动白屏 / ANR。
+        if (!OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS())
+        {
+            this.AttachDeveloperTools();
+        }
 #endif
     }
 

@@ -5,7 +5,7 @@
         xmlns:views="using:Music.Views"
         mc:Ignorable="d"
         x:Class="Music.Views.MainWindow"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/music.ico"
         Title="Music"
         Width="1180" Height="760"
         MinWidth="380" MinHeight="560"

@@ -212,6 +212,18 @@ $env:MUSIC_GITEA_TOKEN = '<你的令牌>'    # 也可用 -Token 传入
 .\scripts\publish-release.ps1 -Version 1.1.1 -KeepSymbols
 ```
 
+更新说明需要多行时，用 PowerShell 的 here-string 传入 `-Notes`（单行内联则用 `` `n `` 换行，如 `-Notes "第一行`n第二行"`）：
+
+```powershell
+$notes = @"
+1、首页增加每日推荐，随机推荐
+2、发现页可以搜索音乐并支持下载
+"@
+.\scripts\publish-release.ps1 -Version 1.1.5 -Notes $notes
+```
+
+> 说明文本会以 `\n` 转义写入 `latest.json`，反序列化后仍是真正的换行，应用内「更新内容」会自动换行显示。
+
 > 默认发布**自包含**桌面包（目标机无需预装 .NET 10 桌面运行时）。AOT 与单文件**必须关闭**，因为 libvlc 依赖 `plugins/` 目录按路径加载。
 
 脚本流程：

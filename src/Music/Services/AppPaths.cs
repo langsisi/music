@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace Music.Services;
 
@@ -29,6 +31,30 @@ public static class AppPaths
     public static string SettingsFile { get; } = Path.Combine(Root, "settings.json");
 
     public static string LibraryDbPath { get; } = Path.Combine(Root, "library.db");
+
+    /// <summary>
+    /// 平台侧（Android）通过该环境变量注入「启动时默认加入的本地音源目录」，
+    /// 多个目录以 <c>;</c> 分隔。桌面端不设置该变量，因此不受影响。
+    /// </summary>
+    public const string DefaultLocalFoldersVariable = "MUSIC_DEFAULT_LOCAL_FOLDERS";
+
+    /// <summary>
+    /// 读取平台注入的默认本地音源目录。惰性读取（不用静态字段），
+    /// 保证在平台设置环境变量之后再取值。
+    /// </summary>
+    public static IReadOnlyList<string> GetDefaultLocalFolders()
+    {
+        var raw = Environment.GetEnvironmentVariable(DefaultLocalFoldersVariable);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return [];
+        }
+
+        return raw
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 
     /// <summary>某曲目刮削歌词的本地缓存路径（曲目 Id 含冒号，需替换为合法文件名字符）。</summary>
     public static string LyricsFileFor(string trackId)

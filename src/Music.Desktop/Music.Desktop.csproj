@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFrameworks>net10.0-windows10.0.19041.0;net10.0</TargetFrameworks>
@@ -15,6 +15,8 @@
 
   <PropertyGroup>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- exe / 资源管理器 / 任务栏图标；仅 Windows 目标需要 -->
+    <ApplicationIcon Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">..\Music\Assets\music.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
