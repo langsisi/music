@@ -1,8 +1,8 @@
 {
-    "version":  "1.1.6",
-    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.6/Music-1.1.6.zip",
-    "sha256":  "90387bedd3fa539a82e7b783c7ca7767c9e9f5303d790143826e9bb87b1fbd9d",
-    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.6/Music-1.1.6.apk",
-    "androidSha256":  "a1dd9d13b2ce72798b7ae01ccbd2206c8370099cc462ceb8ed7025f579968612",
-    "notes":  "1、修改APP图标\n2、安卓APP支持添加本地默认目录,自动申请权限"
+    "version":  "1.1.7",
+    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.7/Music-1.1.7.zip",
+    "sha256":  "663e1fb75e43727087eb1d816a076edc1472f64b739849736db234499e3ccb0f",
+    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.1.7/Music-1.1.7.apk",
+    "androidSha256":  "e07fe664686e574b9711bd85170c46d1a0a896fb269c960f9b7fbe158f2d241e",
+    "notes":  "解决申请手机权限时卡死"
 }
