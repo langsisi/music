@@ -1,8 +1,55 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
 using UIKit;
 
 namespace Music.iOS;
+
+/// <summary>
+/// POSIX 直写文件：AOT 包的 managed File IO 有 JIT 限制（实测 File.AppendAllText
+/// 第二次起触发 "Attempting to JIT compile InvokeStub_SafeFileHandle..ctor"，
+/// 异常还被各处 catch 吞掉）。启动/崩溃日志是黑屏时的生命线通道，
+/// 必须走零 JIT 风险的静态 P/Invoke，不依赖 managed IO 层。
+/// </summary>
+internal static class DiagFile
+{
+    private const int O_WRONLY = 0x0001;
+    private const int O_CREAT = 0x0200;
+    private const int O_APPEND = 0x0400;
+
+    [DllImport("/usr/lib/libSystem.B.dylib", SetLastError = true)]
+    private static extern int open(string path, int flags, int mode);
+
+    [DllImport("/usr/lib/libSystem.B.dylib", SetLastError = true)]
+    private static extern IntPtr write(int fd, byte[] buffer, IntPtr count);
+
+    [DllImport("/usr/lib/libSystem.B.dylib")]
+    private static extern int close(int fd);
+
+    internal static void AppendAllText(string path, string text)
+    {
+        var fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0x180); // 0600：仅应用自身可读写
+        if (fd < 0)
+        {
+            throw new IOException("open 失败 errno=" + Marshal.GetLastWin32Error());
+        }
+
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(text);
+            var written = write(fd, bytes, (IntPtr)bytes.Length);
+            if (written != bytes.Length)
+            {
+                throw new IOException("write 不完整 written=" + written);
+            }
+        }
+        finally
+        {
+            _ = close(fd);
+        }
+    }
+}
 
 /// <summary>
 /// 启动/崩溃日志的系统侧通道。曾直接 P/Invoke 系统 NSLog，真机实测在调用点 SIGABRT 闪退
@@ -40,7 +87,7 @@ public static class Program
         var line = stage + " @" + Environment.TickCount64 + "ms";
         try
         {
-            File.AppendAllText(Path.Combine(PlatformPaths.DataDir, "startup.log"), line + "\n");
+            DiagFile.AppendAllText(Path.Combine(PlatformPaths.DataDir, "startup.log"), line + "\n");
         }
         catch (Exception ex)
         {

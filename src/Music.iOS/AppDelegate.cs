@@ -62,7 +62,7 @@ public partial class AppDelegate : AvaloniaAppDelegate<App>
             // 崩溃日志自己再踩一次文化格式化就永远写不出来了。
             var text = "==== [" + source + "] @ +" + Environment.TickCount64 + "ms ====\n"
                      + dump + "\n\n";
-            File.AppendAllText(Path.Combine(PlatformPaths.DataDir, "crash.log"), text);
+            DiagFile.AppendAllText(Path.Combine(PlatformPaths.DataDir, "crash.log"), text);
         }
         catch (Exception)
         {
