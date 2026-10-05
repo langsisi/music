@@ -24,7 +24,8 @@ concurrency:
 jobs:
   build-ipa:
     runs-on: macos-latest
-    timeout-minutes: 60
+    # 裁剪+AOT 编译在 macOS runner 上很慢，60 分钟不够，放宽到 4 小时
+    timeout-minutes: 240
 
     env:
       # GitHub 的 macOS 镜像用 DEVELOPER_DIR 指定默认 Xcode，其优先级高于
