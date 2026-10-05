@@ -53,8 +53,8 @@ public partial class AppDelegate : AvaloniaAppDelegate<App>
             dump = "(exception.ToString() 失败：" + ex.Message + ")";
         }
 
-        // NSLog 先行：堆栈至少留在系统日志（爱思实时日志可见），文件写失败线索也不丢。
-        NativeLog.Log("CrashLog [" + source + "]: " + dump);
+        // 系统侧通道先行：堆栈至少留在 stderr/系统日志，文件写失败线索也不丢。
+        DiagLog.Log("CrashLog [" + source + "]: " + dump);
 
         try
         {
