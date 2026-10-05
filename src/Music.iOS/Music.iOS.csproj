@@ -31,14 +31,16 @@
   </PropertyGroup>
 
   <!-- AOT / 裁剪：
-       iOS 禁止 JIT，真机 Release 由 iOS SDK 自动走 Mono AOT。
-       曾用 PublishTrimmed=partial：实测裁掉了 framework 内部的反射 stub——
+       iOS 禁止 JIT，真机 Release 由 iOS SDK 自动走 Mono AOT，且强制 PublishTrimmed=true
+       （设 false 会报错）。曾用 TrimMode=partial：实测裁掉 framework 内部反射 stub——
        File IO 的 SafeFileHandle 构造委托在运行时触发 "Attempting to JIT compile
        InvokeStub_SafeFileHandle..ctor ... aot-only mode"，第二次起的全部 managed
        文件 IO 静默失败（设置/缓存/歌词封面全灭），是黑屏的头号嫌疑。
-       先关闭裁剪用包体积换正确性，功能稳定后再逐项加 TrimmerRootDescriptor 收紧。 -->
+       关闭裁剪的正确方式是 MtouchLink=None（保留全部程序集），用包体积换正确性；
+       功能稳定后再逐步收紧（partial / TrimmerRootDescriptor）。 -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <PublishTrimmed>false</PublishTrimmed>
+    <PublishTrimmed>true</PublishTrimmed>
+    <MtouchLink>None</MtouchLink>
   </PropertyGroup>
 
   <ItemGroup>
