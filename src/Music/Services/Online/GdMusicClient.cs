@@ -116,6 +116,21 @@ public sealed class GdMusicClient
             return null;
         }
 
+        // B站结果的 pic_id 本身就是协议相对的图片地址（//i0.hdslb.com/...），
+        // 直接下载可少一次 API 调用（官方限频：5 分钟内不超 50 次请求）。
+        if (picId.StartsWith("//", StringComparison.Ordinal))
+        {
+            try
+            {
+                return await GetBytesAsync($"https:{picId}", cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // 封面只是锦上添花。
+                return null;
+            }
+        }
+
         var metaUrl = BuildUrl("pic", source, $"&id={Uri.EscapeDataString(picId)}&size={size}");
 
         try
@@ -237,8 +252,14 @@ public sealed class GdMusicClient
     private static string DescribeError(JsonElement root)
     {
         var detail = root.ValueKind == JsonValueKind.Object ? GetString(root, "detail") : null;
-        return string.IsNullOrWhiteSpace(detail)
-            ? "GD 音乐台返回了非预期的响应。"
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            return "GD 音乐台返回了非预期的响应。";
+        }
+
+        // 服务端对未开放的音源统一返回「Value of `source` is not supported」。
+        return detail.Contains("not supported", StringComparison.OrdinalIgnoreCase)
+            ? "GD 音乐台暂未开放该音源，请换其他音源试试。"
             : $"GD 音乐台返回错误：{detail}";
     }
 
