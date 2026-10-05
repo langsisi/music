@@ -31,7 +31,12 @@ public partial class AppDelegate : AvaloniaAppDelegate<App>
             // Phase 1 复用 Core 的空实现；Phase 2 再换成 MPNowPlayingInfoCenter。
             services.AddSingleton<ISystemMediaService, NoopSystemMediaService>();
         });
+        Program.LogStartup("appdelegate: AppHost.Configure 完成（DI 注册，服务均未实例化）");
 
+        // 把 Avalonia 框架日志输出到 Console（NSLog）：真机用爱思助手「实时日志」可查看。
+        builder.LogToTrace();
+
+        Program.LogStartup("appdelegate: CustomizeAppBuilder 返回，等待 Avalonia 完成 UI 初始化");
         return base.CustomizeAppBuilder(builder);
     }
 
