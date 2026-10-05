@@ -240,6 +240,89 @@ public sealed class SourceWriteBackService
             : new Progress<double>(value => progress.Report(
                 $"{stage}… {fromPercent + (toPercent - fromPercent) * value:0}%"));
 
+    /// <summary>
+    /// 仅把歌词上传到音源（不做整文件往返写标签）：
+    /// 本地音源直接写同目录同名 <c>.lrc</c>；FTP/SMB/WebDAV 上传同名 <c>.lrc</c>；
+    /// Navidrome 与在线曲目没有实体文件入口，跳过。
+    /// 由「同步」按钮显式触发，不受「刮削时写回音源」开关控制。
+    /// </summary>
+    public async Task<WriteBackResult> UploadLyricsAsync(
+        Track track,
+        string? lyrics,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(lyrics))
+        {
+            return new WriteBackResult(WriteBackStatus.Skipped, "该结果没有歌词。");
+        }
+
+        try
+        {
+            return track.SourceType switch
+            {
+                MusicSourceType.Local => await UploadLyricsLocalAsync(track, lyrics, cancellationToken)
+                    .ConfigureAwait(false),
+
+                MusicSourceType.Ftp or MusicSourceType.Smb or MusicSourceType.WebDav =>
+                    await UploadLyricsRemoteAsync(track, lyrics, progress, cancellationToken)
+                        .ConfigureAwait(false),
+
+                _ => new WriteBackResult(WriteBackStatus.Skipped, "该音源没有可写的实体文件。"),
+            };
+        }
+        catch (Exception ex)
+        {
+            return WriteBackResult.Fail(ex.Message);
+        }
+    }
+
+    private static async Task<WriteBackResult> UploadLyricsLocalAsync(
+        Track track,
+        string lyrics,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(track.Path))
+        {
+            return WriteBackResult.Fail("找不到本地音频文件。");
+        }
+
+        await File.WriteAllTextAsync(
+                Path.ChangeExtension(track.Path, ".lrc"), lyrics, Encoding.UTF8, cancellationToken)
+            .ConfigureAwait(false);
+        return WriteBackResult.Ok();
+    }
+
+    private async Task<WriteBackResult> UploadLyricsRemoteAsync(
+        Track track,
+        string lyrics,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        var config = _settings.Current.Sources
+            .FirstOrDefault(source => source.Id == track.SourceId);
+        if (config is null)
+        {
+            return WriteBackResult.Fail("找不到音源配置。");
+        }
+
+        var remotePath = track.RemoteId;
+        if (string.IsNullOrWhiteSpace(remotePath))
+        {
+            return WriteBackResult.Fail("曲目缺少远端路径。");
+        }
+
+        progress?.Report("正在上传歌词到音源…");
+
+        var lrcRemote = Path.ChangeExtension(remotePath, ".lrc");
+        await using var client = _remoteClientFactory.Create(config);
+        using var lrcStream = new MemoryStream(Encoding.UTF8.GetBytes(lyrics));
+        await client
+            .UploadAsync(lrcRemote, lrcStream, null, cancellationToken)
+            .ConfigureAwait(false);
+        return WriteBackResult.Ok();
+    }
+
     private static async Task<bool> TryWriteSidecarLyricsAsync(
         string lrcPath,
         string? lyrics,

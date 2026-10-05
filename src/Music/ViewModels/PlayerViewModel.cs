@@ -96,6 +96,8 @@ public partial class PlayerViewModel : ViewModelBase
 
         _playback.Changed += (_, _) => Sync();
         _systemMedia.CommandReceived += OnSystemMediaCommand;
+        // 后台补齐（同步抓远端 .lrc / 首播解析内嵌标签）拿到歌词后自动刷新当前曲目的歌词显示。
+        _lyricsService.LyricsArrived += OnLyricsArrived;
 
         // 启动时恢复上次的音量；引擎不可用时也无害。
         _volume = settings.Current.Volume;
@@ -727,7 +729,7 @@ public partial class PlayerViewModel : ViewModelBase
 
         SelectedSearchResult = result;
 
-        // 选中候选后把它的元数据填进编辑区，点「应用所选」时才会带上这些值写回音源。
+        // 选中候选后把它的元数据填进编辑区，点「应用 / 同步」时才会带上这些值。
         // 年份数据源不一定提供（Year 为 0），此时保留用户自己填的值不变。
         if (!string.IsNullOrWhiteSpace(result.Candidate.Title))
         {
@@ -750,9 +752,15 @@ public partial class PlayerViewModel : ViewModelBase
         }
     }
 
-    /// <summary>应用所选结果：下载封面/歌词到本地，并保存编辑过的元数据。</summary>
+    /// <summary>应用所选结果：下载封面/歌词到本地缓存并保存编辑过的元数据，不写回音源。</summary>
     [RelayCommand]
-    private async Task ApplySearchResult()
+    private Task ApplySearchResult() => ApplySearchResultCoreAsync(uploadLyricsToSource: false);
+
+    /// <summary>同步所选结果：在「应用」的基础上把歌词 .lrc 上传到音源同目录，供其他设备取用。</summary>
+    [RelayCommand]
+    private Task SyncSearchResult() => ApplySearchResultCoreAsync(uploadLyricsToSource: true);
+
+    private async Task ApplySearchResultCoreAsync(bool uploadLyricsToSource)
     {
         if (CurrentTrack is not { } track
             || SelectedSearchProvider is not { } provider
@@ -762,14 +770,14 @@ public partial class PlayerViewModel : ViewModelBase
             return;
         }
 
-        MetadataSearchStatusText = "正在应用…";
+        MetadataSearchStatusText = uploadLyricsToSource ? "正在应用并同步歌词…" : "正在应用…";
 
         try
         {
-            // 写回远端要整文件往返，把阶段进度直接显示在状态栏，避免看起来像卡死。
             var progress = new Progress<string>(text => MetadataSearchStatusText = text);
 
-            // 元数据随候选一起交给 ApplyAsync：封面、歌词、元信息在一次写回里全部落到音源上。
+            // 元数据随候选一起交给 ApplyAsync：封面、歌词、元信息落到本地缓存；
+            // 同步时再把歌词文件上传到音源（轻量单文件上传）。
             var outcome = await _scraper
                 .ApplyAsync(
                     track,
@@ -779,7 +787,8 @@ public partial class PlayerViewModel : ViewModelBase
                     SearchArtist,
                     SearchAlbum,
                     SearchYear,
-                    progress)
+                    progress,
+                    uploadLyricsToSource: uploadLyricsToSource)
                 .ConfigureAwait(true);
 
             if (_playback.CurrentTrack?.Id == track.Id)
@@ -793,10 +802,7 @@ public partial class PlayerViewModel : ViewModelBase
                 OnPropertyChanged(nameof(CoverPath));
             }
 
-            if (outcome.LyricsUpdated)
-            {
-                await LoadLyricsAsync(track).ConfigureAwait(true);
-            }
+            // 歌词刷新由 LyricsService.LyricsArrived 事件触发（ApplyAsync 里歌词落库后 Invalidate）。
 
             MetadataSearchStatusText = outcome.Message;
         }
@@ -952,6 +958,22 @@ public partial class PlayerViewModel : ViewModelBase
         {
             QueueItems[i].IsCurrent = i == CurrentQueueIndex;
         }
+    }
+
+    /// <summary>
+    /// 歌词在后台补齐（同步时抓远端 .lrc / 首播后解析内嵌标签）完成时自动刷新：
+    /// 仅当补齐的正是当前曲目才重新加载；事件可能在后台线程触发，调度回 UI 线程。
+    /// </summary>
+    private void OnLyricsArrived(string trackId)
+    {
+        if (trackId != _lyricsTrackId
+            || _playback.CurrentTrack is not { } track
+            || track.Id != trackId)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() => _ = LoadLyricsAsync(track));
     }
 
     private async Task LoadLyricsAsync(Track? track)

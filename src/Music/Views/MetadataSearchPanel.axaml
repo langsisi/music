@@ -145,10 +145,18 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <Button Classes="accent" HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            Command="{Binding ApplySearchResultCommand}"
-                            Content="应用所选（下载封面 / 歌词）" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Classes="accent" Grid.Column="0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Command="{Binding ApplySearchResultCommand}"
+                                Content="应用" />
+                        <Button Grid.Column="1"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Command="{Binding SyncSearchResultCommand}"
+                                Content="同步" />
+                    </Grid>
                 </StackPanel>
 
                 <TextBlock Text="{Binding MetadataSearchStatusText}" Classes="muted"

@@ -15,7 +15,8 @@ namespace Music.Services.Metadata;
 /// <summary>
 /// 远程音源（FTP / SMB / WebDAV）的封面 / 歌词补齐，分两个时机：
 /// <list type="bullet">
-/// <item>同步入库时：<see cref="PrefetchCoversAsync"/> 只读文件头部解析内嵌封面，避免播放一次才看到封面。</item>
+/// <item>同步入库时：<see cref="PrefetchCoversAsync"/> 只读文件头部解析内嵌封面，避免播放一次才看到封面；
+/// 同时顺带抓取同目录同名 .lrc（几 KB 的小文件），新设备同步完即可显示歌词。</item>
 /// <item>首次播放后：<see cref="EnrichInBackground"/> 从已落盘的缓存文件读标签，补齐封面与歌词
 /// （内嵌没有歌词时再抓同目录同名 .lrc）。</item>
 /// </list>
@@ -252,6 +253,13 @@ public sealed class RemoteMetadataEnricher
                     // 只用文件标签覆盖「还没读过标签」的曲目，避免把同设备上用户已编辑、
                     // 但尚未成功写回文件的元数据冲掉。
                     var metadataFound = NeedsTagRead(track) && ApplyTagMetadata(track, probe);
+
+                    // 顺带抓远端同名 .lrc（几 KB 的小文件）：新设备同步完就有歌词，
+                    // 不用等首次播放后再补齐；远端没有 .lrc 时只是多一次小请求。
+                    if (await TryCacheSidecarLyricsAsync(client, track, cancellationToken).ConfigureAwait(false))
+                    {
+                        _lyrics.Invalidate(track.Id);
+                    }
 
                     List<Track>? flush = null;
                     if (coverFound || metadataFound)
@@ -512,6 +520,33 @@ public sealed class RemoteMetadataEnricher
             return false;
         }
 
+        try
+        {
+            await using var client = _clients.Create(config);
+            await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            return await TryCacheSidecarLyricsAsync(client, track, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // 连接失败等异常都当作没有歌词。
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 用已连接的远端客户端下载同目录同名 .lrc 并写入本地歌词缓存；
+    /// 远端没有 .lrc 或读取失败都返回 false，不影响调用方继续。
+    /// </summary>
+    private async Task<bool> TryCacheSidecarLyricsAsync(
+        IRemoteFileClient client,
+        Track track,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(track.RemoteId) || File.Exists(AppPaths.LyricsFileFor(track.Id)))
+        {
+            return false;
+        }
+
         var lrcPath = Path.ChangeExtension(track.RemoteId, ".lrc");
         if (string.IsNullOrEmpty(lrcPath))
         {
@@ -520,9 +555,6 @@ public sealed class RemoteMetadataEnricher
 
         try
         {
-            await using var client = _clients.Create(config);
-            await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
-
             using var buffer = new MemoryStream();
             await client.DownloadAsync(lrcPath, buffer, null, cancellationToken).ConfigureAwait(false);
 

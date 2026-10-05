@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,6 +13,9 @@ public sealed class LyricsService
 {
     private readonly IReadOnlyList<ILyricsProvider> _providers;
     private readonly ConcurrentDictionary<string, LyricDocument> _cache = new();
+
+    /// <summary>歌词在后台补齐落盘后触发（参数为曲目 Id），界面据此重新加载当前曲目的歌词。</summary>
+    public event Action<string>? LyricsArrived;
 
     public LyricsService(IEnumerable<ILyricsProvider> providers) => _providers = providers.ToList();
 
@@ -40,6 +44,10 @@ public sealed class LyricsService
         return lyrics;
     }
 
-    /// <summary>清除某曲目的歌词缓存，用于在线刮削后立即生效。</summary>
-    public void Invalidate(string trackId) => _cache.TryRemove(trackId, out _);
+    /// <summary>清除某曲目的歌词缓存，用于歌词后台补齐/刮削后立即生效，并通知界面重新加载。</summary>
+    public void Invalidate(string trackId)
+    {
+        _cache.TryRemove(trackId, out _);
+        LyricsArrived?.Invoke(trackId);
+    }
 }

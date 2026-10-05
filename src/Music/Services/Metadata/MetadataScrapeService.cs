@@ -98,8 +98,9 @@ public sealed class MetadataScrapeService
     }
 
     /// <summary>
-    /// 把用户选定的候选应用为本地封面/歌词缓存，并把「封面 + 歌词 + 编辑后的元数据」一次性写回音源。
-    /// 元数据随同一次写回落地，避免对同一个远端文件重复下载上传。
+    /// 把用户选定的候选应用为本地封面/歌词缓存并落库；
+    /// <paramref name="uploadLyricsToSource"/> 为 true 时再把歌词 .lrc 上传到音源同目录
+    /// （轻量单文件上传，不做整文件往返写标签，其他设备同步音源即可拿到歌词）。
     /// </summary>
     public async Task<ScrapeResult> ApplyAsync(
         Track track,
@@ -110,7 +111,8 @@ public sealed class MetadataScrapeService
         string? album = null,
         string? year = null,
         IProgress<string>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool uploadLyricsToSource = false)
     {
         var provider = FindProvider(providerId);
         if (provider is null)
@@ -158,24 +160,20 @@ public sealed class MetadataScrapeService
 
         var message = BuildMessage(provider, coverUpdated, lyricsUpdated);
 
-        var writeBack = await _writeBack
-            .WriteBackAsync(
-                track,
-                coverBytes,
-                lyrics,
-                title: track.Title,
-                artist: track.Artist,
-                album: track.Album,
-                progress: progress,
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
-        message = writeBack.Status switch
+        // 「应用」只落本地；「同步」再把歌词文件上传到音源，供其他设备同步音源时取用。
+        if (uploadLyricsToSource)
         {
-            WriteBackStatus.Succeeded => $"{message} 封面、歌词与元信息已写回音源。",
-            WriteBackStatus.Failed => $"{message} 写回音源失败：{writeBack.Message}",
-            _ => writeBack.Message.Length > 0 ? $"{message} 未写回音源：{writeBack.Message}" : message,
-        };
+            var upload = await _writeBack
+                .UploadLyricsAsync(track, lyrics, progress, cancellationToken)
+                .ConfigureAwait(false);
+
+            message = upload.Status switch
+            {
+                WriteBackStatus.Succeeded => $"{message} 歌词已同步到音源。",
+                WriteBackStatus.Failed => $"{message} 歌词同步失败：{upload.Message}",
+                _ => upload.Message.Length > 0 ? $"{message} 未同步歌词：{upload.Message}" : message,
+            };
+        }
 
         return new ScrapeResult(coverUpdated, lyricsUpdated, message);
     }
