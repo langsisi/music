@@ -212,9 +212,20 @@
                                     <TextBlock Text="{Binding DisplayTitle}" FontSize="13.5"
                                                TextTrimming="CharacterEllipsis"
                                                Foreground="{DynamicResource TextPrimaryBrush}" />
-                                    <TextBlock Text="{Binding SubtitleWithSource}" FontSize="12"
-                                               TextTrimming="CharacterEllipsis"
-                                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                                    <!-- 音源标签固定在行尾：副标题过长截断时标签仍可见，用于区分重复曲目 -->
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                        <TextBlock Grid.Column="0" Text="{Binding Subtitle}" FontSize="12"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <Border Grid.Column="1" CornerRadius="6" Padding="6,2"
+                                                VerticalAlignment="Center"
+                                                Background="{DynamicResource SurfaceHoverBrush}"
+                                                IsVisible="{Binding HasSourceName}">
+                                            <TextBlock Text="{Binding SourceName}" FontSize="10.5"
+                                                       MaxWidth="120" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        </Border>
+                                    </Grid>
                                 </StackPanel>
 
                                 <!-- 加入 / 移出分类：桌面端内联常驻，手机端改为右滑露出 -->
