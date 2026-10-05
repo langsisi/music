@@ -7,6 +7,18 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
+  <!-- iOS 构建经 Music.iOS.csproj 的 ProjectReference 传入 ExcludeLibVlc=true：
+       iOS 用 AVFoundation 播放器，剔除 VlcAudioPlayer 后 LibVLCSharp 不会进入应用——
+       其 iOS 资产内的 P/Invoke（@rpath/DynamicMobileVLCKit.framework/...）会触发
+       原生链接 -framework DynamicMobileVLCKit，而不引用 VideoLAN.LibVLC.iOS 时必然失败。 -->
+  <PropertyGroup Condition="'$(ExcludeLibVlc)' == 'true'">
+    <DefineConstants>$(DefineConstants);EXCLUDE_LIBVLC</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ExcludeLibVlc)' == 'true'">
+    <Compile Remove="Services/Audio/VlcAudioPlayer.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <!-- 内置的在线升级配置（地址 + 只读令牌），编译进程序集，终端用户无需配置。 -->
@@ -24,7 +36,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
 
     <!-- Audio engine (managed layer only: native libvlc lives in the platform heads) -->
-    <PackageReference Include="LibVLCSharp" />
+    <PackageReference Include="LibVLCSharp" Condition="'$(ExcludeLibVlc)' != 'true'" />
     <!-- Local metadata -->
     <PackageReference Include="TagLibSharp" />
     <!-- FTP 音源 -->

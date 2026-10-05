@@ -54,7 +54,10 @@ public static class ServiceCollectionExtensions
         // 播放引擎与缓存
         services.AddSingleton(new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromMinutes(5) });
         services.AddSingleton<IAudioCache, SqliteAudioCache>();
+#if !EXCLUDE_LIBVLC
+        // EXCLUDE_LIBVLC（iOS 构建）：不注册 VlcAudioPlayer，由平台 head 提供唯一实现。
         services.AddSingleton<IAudioPlayer, VlcAudioPlayer>();
+#endif
         // 本地 HTTP 代理：FTP/SMB/WebDAV 曲目边下边播（不可用时自动回退到整文件下载）。
         services.AddSingleton<LocalMediaProxy>();
         services.AddSingleton<IMediaResolver, CachedMediaResolver>();

@@ -38,6 +38,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Music\Music.csproj" />
+    <!-- ExcludeLibVlc=true：iOS 用 AVFoundation 播放器，Core 剔除 VlcAudioPlayer 与
+         LibVLCSharp，避免其 iOS 资产的 P/Invoke 触发 DynamicMobileVLCKit 框架链接。 -->
+    <ProjectReference Include="..\Music\Music.csproj" AdditionalProperties="ExcludeLibVlc=true" />
   </ItemGroup>
 </Project>

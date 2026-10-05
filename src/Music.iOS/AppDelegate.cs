@@ -23,7 +23,8 @@ public partial class AppDelegate : AvaloniaAppDelegate<App>
         // 必须在 Avalonia 初始化 App 之前完成注册：App.Initialize 会用到 AppHost.Services。
         AppHost.Configure(services =>
         {
-            // 覆盖 Core 里的 VlcAudioPlayer：后注册者生效，libvlc 不会被解析。
+            // Core 在 iOS 构建（ExcludeLibVlc=true）下不再注册 VlcAudioPlayer，
+            // 这里注册 AVFoundation 播放器作为唯一实现。
             services.AddSingleton<IAudioPlayer, IosAudioPlayer>();
             // iOS 沙盒禁止应用内自更新。
             services.AddSingleton<IUpdateInstaller, UnsupportedUpdateInstaller>();
