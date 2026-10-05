@@ -46,6 +46,15 @@ public static class ServiceCollectionExtensions
                 })
             {
                 Timeout = System.Threading.Timeout.InfiniteTimeSpan,
+                // 固定 User-Agent：WAF/CDN（阿里云 ESA 等）对缺失 UA 的请求更容易判定为机器人流量，
+                // 且用户可在防护控制台按该 UA 精确放行 WebDAV 请求。
+                DefaultRequestHeaders =
+                {
+                    UserAgent =
+                    {
+                        new System.Net.Http.Headers.ProductInfoHeaderValue("Music", "1.0"),
+                    },
+                },
             }));
         services.AddSingleton<IMusicSourceFactory, MusicSourceFactory>();
         services.AddSingleton<LibrarySyncService>();
@@ -72,13 +81,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<LyricsBroadcastServer>();
         services.AddSingleton<ISystemMediaService, NoopSystemMediaService>();
 
-        // 在线元数据刮削（封面 / 歌词）；注册顺序即设置页下拉顺序。
+        // 在线元数据刮削（封面 / 歌词）；注册顺序即设置页下拉顺序，QQ 默认首选。
         services.AddSingleton<MetadataHttpClient>();
-        services.AddSingleton<IMetadataProvider, NeteaseMetadataProvider>();
         services.AddSingleton<IMetadataProvider, QqMetadataProvider>();
+        services.AddSingleton<IMetadataProvider, NeteaseMetadataProvider>();
         services.AddSingleton<IMetadataProvider, KugouMetadataProvider>();
         services.AddSingleton<IMetadataProvider, KuwoMetadataProvider>();
-        services.AddSingleton<IMetadataProvider, MiguMetadataProvider>();
+        // 咪咕搜索 API 已下线（重定向到 v5 首页），移除该数据源。
         services.AddSingleton<IMetadataProvider, ItunesMetadataProvider>();
         services.AddSingleton<SourceWriteBackService>();
         services.AddSingleton<RemoteMetadataEnricher>();

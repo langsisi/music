@@ -24,7 +24,8 @@ public sealed class ItunesMetadataProvider : IMetadataProvider
         CancellationToken cancellationToken = default)
     {
         var keyword = Uri.EscapeDataString($"{query.Title} {query.Artist}".Trim());
-        var url = $"https://itunes.apple.com/search?term={keyword}&entity=song&limit=10&country=cn";
+        // 不指定 country：country=cn 对中文曲目实测返回 0 结果，全球 storefront 才能搜到。
+        var url = $"https://itunes.apple.com/search?term={keyword}&entity=song&limit=10";
 
         var json = await _http.GetStringAsync(url, cancellationToken, referer: "https://music.apple.com/")
             .ConfigureAwait(false);

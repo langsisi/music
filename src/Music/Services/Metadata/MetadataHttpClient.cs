@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -6,8 +7,9 @@ using System.Threading.Tasks;
 namespace Music.Services.Metadata;
 
 /// <summary>
-/// 刮削专用 HTTP 封装：在共享 <see cref="HttpClient"/> 上按请求注入各数据源
-/// 所需的 UA / Referer / Cookie（<b>不</b>改全局默认头，Navidrome 复用同一个实例）。
+/// 刮削专用 HTTP 封装：按请求注入各数据源所需的 UA / Referer / Cookie。
+/// <b>绕过系统代理直连</b>：刮削目标是国内音乐 API，走系统代理（Clash 等）出境
+/// 会被风控拦截或返回空结果（实测表现为除 QQ 外全部源搜不到内容）。
 /// 网络错误或非 2xx 一律静默返回 null；仅当调用方取消时抛出。
 /// </summary>
 public sealed class MetadataHttpClient
@@ -15,9 +17,14 @@ public sealed class MetadataHttpClient
     private const string UserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
 
-    private readonly HttpClient _http;
-
-    public MetadataHttpClient(HttpClient http) => _http = http;
+    private readonly HttpClient _http = new(new SocketsHttpHandler
+    {
+        AutomaticDecompression = DecompressionMethods.All,
+        UseProxy = false,
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(30),
+    };
 
     public async Task<string?> GetStringAsync(
         string url,

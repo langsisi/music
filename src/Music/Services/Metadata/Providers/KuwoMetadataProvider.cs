@@ -1,8 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,8 +7,9 @@ using System.Threading.Tasks;
 namespace Music.Services.Metadata.Providers;
 
 /// <summary>
-/// 酷我音乐：搜索 / 封面 / 歌词（移动端私有接口，尽力而为）。
-/// 搜索接口返回的是单引号「类 JSON」，用正则宽松提取字段。
+/// 酷我音乐：搜索 / 封面（移动端私有接口，尽力而为）。
+/// 搜索接口返回的是单引号「类 JSON」且条目内含嵌套对象，用正则宽松提取字段。
+/// 歌词接口（m.kuwo.cn songinfoandlrc）已下线、www API 有签名反爬，故不再提供歌词。
 /// </summary>
 public sealed partial class KuwoMetadataProvider : IMetadataProvider
 {
@@ -25,7 +23,7 @@ public sealed partial class KuwoMetadataProvider : IMetadataProvider
 
     public string DisplayName => "酷我音乐";
 
-    public bool SupportsLyrics => true;
+    public bool SupportsLyrics => false;
 
     public async Task<IReadOnlyList<MetadataCandidate>> SearchAsync(
         TrackQuery query,
@@ -64,7 +62,7 @@ public sealed partial class KuwoMetadataProvider : IMetadataProvider
                 Unescape(Field(item, "ARTIST")),
                 Unescape(Field(item, "ALBUM")),
                 cover,
-                HasLyrics: true,
+                HasLyrics: false,
                 Year: MetadataYear.FromDate(Field(item, "RELEASEDATE"))));
         }
 
@@ -76,67 +74,9 @@ public sealed partial class KuwoMetadataProvider : IMetadataProvider
             ? Task.FromResult<byte[]?>(null)
             : _http.GetBytesAsync(candidate.CoverUrl, cancellationToken, Referer);
 
-    public async Task<string?> GetLyricsAsync(MetadataCandidate candidate, CancellationToken cancellationToken = default)
-    {
-        var url = $"https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId={candidate.RemoteId}";
-        var json = await _http.GetStringAsync(url, cancellationToken, Referer).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return null;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            if (!document.RootElement.TryGetProperty("data", out var data)
-                || !data.TryGetProperty("lrclist", out var list)
-                || list.ValueKind != JsonValueKind.Array)
-            {
-                return null;
-            }
-
-            var builder = new StringBuilder();
-            foreach (var line in list.EnumerateArray())
-            {
-                if (!line.TryGetProperty("time", out var timeNode)
-                    || !line.TryGetProperty("lineLyric", out var lyricNode)
-                    || lyricNode.ValueKind != JsonValueKind.String)
-                {
-                    continue;
-                }
-
-                var text = lyricNode.GetString();
-                if (string.IsNullOrWhiteSpace(text))
-                {
-                    continue;
-                }
-
-                var seconds = ParseSeconds(timeNode);
-                var span = TimeSpan.FromSeconds(seconds);
-                builder.Append(CultureInfo.InvariantCulture, $"[{span.Minutes:D2}:{span.Seconds:D2}.{span.Milliseconds / 10:D2}]");
-                builder.AppendLine(text);
-            }
-
-            return builder.Length == 0 ? null : builder.ToString();
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private static double ParseSeconds(JsonElement node)
-    {
-        if (node.ValueKind == JsonValueKind.Number && node.TryGetDouble(out var number))
-        {
-            return number;
-        }
-
-        return node.ValueKind == JsonValueKind.String
-               && double.TryParse(node.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : 0;
-    }
+    /// <summary>酷我不再提供歌词接口。</summary>
+    public Task<string?> GetLyricsAsync(MetadataCandidate candidate, CancellationToken cancellationToken = default)
+        => Task.FromResult<string?>(null);
 
     private static string Field(string item, string name)
     {
@@ -150,6 +90,8 @@ public sealed partial class KuwoMetadataProvider : IMetadataProvider
             .Replace("&amp;", "&", StringComparison.Ordinal)
             .Trim();
 
-    [GeneratedRegex(@"\{[^{}]*'MUSICRID'\s*:\s*'MUSIC_\d+'[^{}]*\}")]
+    // 条目内含一层嵌套对象（如 'audiobookpayinfo':{'download':'0','play':'0'}），
+    // 允许嵌套一层大括号，否则匹配不到任何条目。
+    [GeneratedRegex(@"\{(?:[^{}]|\{[^{}]*\})*'MUSICRID'\s*:\s*'MUSIC_\d+'(?:[^{}]|\{[^{}]*\})*\}")]
     private static partial Regex ItemRegex();
 }
