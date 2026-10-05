@@ -54,14 +54,7 @@ public partial class AppDelegate : AvaloniaAppDelegate<App>
         }
 
         // NSLog 先行：堆栈至少留在系统日志（爱思实时日志可见），文件写失败线索也不丢。
-        try
-        {
-            NSLog("%@", "CrashLog [" + source + "]: " + dump);
-        }
-        catch
-        {
-            // 连 NSLog 都失败就真的没通道了，放弃。
-        }
+        NativeLog.Log("CrashLog [" + source + "]: " + dump);
 
         try
         {
