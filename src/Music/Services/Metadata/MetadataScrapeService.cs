@@ -219,7 +219,7 @@ public sealed class MetadataScrapeService
             return WriteBackResult.Skipped;
         }
 
-        return await _writeBack
+        var result = await _writeBack
             .WriteBackAsync(
                 track,
                 coverBytes: null,
@@ -230,6 +230,55 @@ public sealed class MetadataScrapeService
                 progress: progress,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+
+        // 远端文件已按标题重命名：曲库记录要迁到新 Id（路径哈希），内存里的曲目对象也要跟着改，
+        // 否则当前播放还持有旧远端路径，下次同步也会把改名前后的文件当成两首歌。
+        if (result.Status == WriteBackStatus.Succeeded && result.NewRemotePath is { } newRemotePath)
+        {
+            await ApplyRemoteRenameAsync(track, newRemotePath, result.NewDisplayPath!)
+                .ConfigureAwait(false);
+        }
+
+        return result;
+    }
+
+    /// <summary>远端文件重命名后的收尾：迁移曲库主键与收藏/歌单关系，再把本地歌词缓存挪到新 Id 下。</summary>
+    private async Task ApplyRemoteRenameAsync(Track track, string newRemotePath, string newDisplayPath)
+    {
+        var oldId = track.Id;
+        var newId = TrackKey.Create(track.SourceId, newRemotePath);
+
+        if (!await _libraryStore
+                .RekeyTrackAsync(oldId, newId, newRemotePath, newDisplayPath)
+                .ConfigureAwait(false))
+        {
+            return;
+        }
+
+        MoveLyricsCache(oldId, newId);
+
+        track.Id = newId;
+        track.RemoteId = newRemotePath;
+        track.Path = newDisplayPath;
+    }
+
+    /// <summary>本地歌词缓存按曲目 Id 命名，Id 变了把文件一起挪过去，避免重复刮削歌词。</summary>
+    private static void MoveLyricsCache(string oldId, string newId)
+    {
+        try
+        {
+            var oldPath = AppPaths.LyricsFileFor(oldId);
+            if (!File.Exists(oldPath))
+            {
+                return;
+            }
+
+            File.Move(oldPath, AppPaths.LyricsFileFor(newId), overwrite: true);
+        }
+        catch (Exception)
+        {
+            // 歌词缓存丢了可以重新刮削，搬移失败不影响保存。
+        }
     }
 
     /// <summary>下载封面并写入本地封面缓存，返回封面字节（没有则 null）。</summary>

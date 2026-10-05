@@ -322,6 +322,90 @@ public sealed class SqliteLibraryStore : ILibraryStore
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>把曲目挪到新 Id，并迁移收藏与归类关系（远端文件重命名后调用）。</summary>
+    public async Task<bool> RekeyTrackAsync(
+        string oldId,
+        string newId,
+        string? remoteId,
+        string path,
+        CancellationToken cancellationToken = default)
+    {
+        if (oldId == newId)
+        {
+            return true;
+        }
+
+        var success = false;
+
+        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var connection = CreateConnection();
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = await connection
+                .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            // 新 Id 已被占用（理论上不可能）时直接放弃，避免主键冲突把更新回滚成半截状态。
+            await using (var check = connection.CreateCommand())
+            {
+                check.Transaction = (SqliteTransaction)transaction;
+                check.CommandText = "SELECT COUNT(*) FROM Tracks WHERE Id = $newId";
+                check.Parameters.AddWithValue("$newId", newId);
+                var exists = (long)(await check.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))! > 0;
+                if (exists)
+                {
+                    return false;
+                }
+            }
+
+            // 主键改到新 Id，同时带上重命名后的远端路径与展示地址。
+            await using (var rekey = connection.CreateCommand())
+            {
+                rekey.Transaction = (SqliteTransaction)transaction;
+                rekey.CommandText =
+                    "UPDATE Tracks SET Id = $newId, RemoteId = $remoteId, Path = $path WHERE Id = $oldId";
+                rekey.Parameters.AddWithValue("$newId", newId);
+                rekey.Parameters.AddWithValue("$oldId", oldId);
+                rekey.Parameters.AddWithValue("$remoteId", (object?)remoteId ?? DBNull.Value);
+                rekey.Parameters.AddWithValue("$path", path);
+
+                // 没动到行说明旧记录已不在（如另一端同步过），视为失败。
+                if (await rekey.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 0)
+                {
+                    return false;
+                }
+            }
+
+            // 收藏与归类关系跟着迁到新 Id，保证下次同步（按路径哈希生成 Id）仍能对上。
+            await using (var migrate = connection.CreateCommand())
+            {
+                migrate.Transaction = (SqliteTransaction)transaction;
+                migrate.CommandText = """
+                    UPDATE Favorites SET TrackId = $newId WHERE TrackId = $oldId;
+                    UPDATE CategoryTracks SET TrackId = $newId WHERE TrackId = $oldId;
+                    """;
+                migrate.Parameters.AddWithValue("$newId", newId);
+                migrate.Parameters.AddWithValue("$oldId", oldId);
+                await migrate.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            success = true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        if (success)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        return success;
+    }
+
     // ---------------- 收藏 ----------------
 
     public async Task<IReadOnlyCollection<string>> GetFavoriteTrackIdsAsync(

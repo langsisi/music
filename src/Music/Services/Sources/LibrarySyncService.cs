@@ -108,6 +108,24 @@ public sealed class LibrarySyncService
     /// </summary>
     public async Task SyncMissingSourcesAsync(CancellationToken cancellationToken = default)
     {
+        // 先清掉「音源配置已不存在」的遗留曲目（例如旧版本删除音源时未清理），
+        // 否则它们会一直留在曲库里，播放/写回时报「找不到音源配置」。
+        // 在线曲目的 SourceId 是「netease」等短名、不在音源配置里，必须排除。
+        var sourceIds = _settings.Current.Sources
+            .Select(source => source.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var allTracks = await _libraryStore
+            .GetTracksAsync(cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        var orphanIds = allTracks
+            .Where(track => track.SourceType != MusicSourceType.Online && !sourceIds.Contains(track.SourceId))
+            .Select(track => track.Id)
+            .ToList();
+        if (orphanIds.Count > 0)
+        {
+            await _libraryStore.RemoveTracksAsync(orphanIds, cancellationToken).ConfigureAwait(false);
+        }
+
         foreach (var config in _settings.Current.Sources)
         {
             if (!config.Enabled)

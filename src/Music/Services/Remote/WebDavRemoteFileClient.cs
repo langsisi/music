@@ -16,11 +16,11 @@ using Music.Models;
 namespace Music.Services.Remote;
 
 /// <summary>
-/// 基于 <see cref="HttpClient"/> 的 WebDAV 客户端（PROPFIND 列目录 / GET 下载 / PUT 上传 / MKCOL 建目录）。
+/// 基于 <see cref="HttpClient"/> 的 WebDAV 客户端（PROPFIND 列目录 / GET 下载 / PUT 上传 / MKCOL 建目录 / MOVE 改名）。
 /// 只支持 Basic 认证；每请求单独附带认证头，避免污染共享的 HttpClient。
 /// 注意：目录列举只用 <c>Depth: 1</c> 逐层展开，因为 <c>Depth: infinity</c> 常被服务端禁用。
 /// </summary>
-public sealed class WebDavRemoteFileClient : IRemoteFileClient
+public sealed class WebDavRemoteFileClient : IRemoteFileClient, IRemoteFileMoveClient
 {
     private const string PropFindBody = """
         <?xml version="1.0" encoding="utf-8"?>
@@ -35,6 +35,7 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
     private static readonly HttpMethod PropFindMethod = new("PROPFIND");
     private static readonly HttpMethod MkColMethod = new("MKCOL");
     private static readonly HttpMethod DeleteMethod = new("DELETE");
+    private static readonly HttpMethod MoveMethod = new("MOVE");
 
     private readonly WebDavSourceConfig _config;
     private readonly HttpClient _httpClient;
@@ -55,6 +56,13 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
 
         using var response = await SendAsync(PropFindMethod, probe, depth: "0", content: null, cancellationToken)
             .ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            // 401 单独说明是凭据问题：通用状态码文案容易被误解成网络 / WAF 被拦。
+            throw new IOException(
+                $"WebDAV 用户名或密码错误（服务器返回 401，路径 {probe.AbsolutePath}）。请核对用户名和密码后重试。");
+        }
 
         if (!response.IsSuccessStatusCode)
         {
@@ -226,6 +234,33 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
         }
     }
 
+    /// <summary>服务端原地改名（RFC 4918 MOVE）：旧路径文件直接消失，无需上传/删除，被播放占用也不影响。</summary>
+    public async Task MoveAsync(string remotePath, string destinationPath, CancellationToken cancellationToken)
+    {
+        using var request = NewRequest(MoveMethod, BuildFileUri(remotePath));
+        // RFC 4918 要求 Destination 为绝对 URI。
+        request.Headers.Add("Destination", BuildFileUri(destinationPath).AbsoluteUri);
+
+        using var response = await _httpClient
+            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new IOException($"重命名远端文件失败：{(int)response.StatusCode} {response.ReasonPhrase}");
+        }
+
+        // 201/204 没有正文，直接成功；个别网关会以 200 OK + HTML 挑战页「假装成功」，核对一下正文。
+        if (response.StatusCode == HttpStatusCode.OK)
+        {
+            var body = await ReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
+            if (LooksLikeHtmlPage(body))
+            {
+                throw new IOException(DescribeHtmlBody(body));
+            }
+        }
+    }
+
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     private async Task<List<(Uri Uri, bool IsDirectory, long Size)>> PropFindDepthOneAsync(
@@ -236,6 +271,14 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
             .ConfigureAwait(false);
 
         var body = await ReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
+
+        // 阿里云 ESA / WAF 等前置防护对「非浏览器」请求会返回 200 OK + HTML 挑战页（要求执行 JS
+        // 计算放行 Cookie，应用无法执行），先识别这种情形给出可行动的提示，
+        // 而不是抛让人摸不着头脑的「没有返回 WebDAV XML」。
+        if (LooksLikeHtmlPage(body))
+        {
+            throw new IOException(DescribeHtmlBody(body));
+        }
 
         // 标准响应是 207 Multi-Status，但不少服务端（或前置反向代理）会把 PROPFIND 归一化成 200 OK，
         // 两者正文都是 multistatus，必须都接受，否则同步会误报「PROPFIND 失败：200 OK」。
@@ -312,6 +355,29 @@ public sealed class WebDavRemoteFileClient : IRemoteFileClient
         }
 
         return Encoding.UTF8.GetString(bytes);
+    }
+
+    /// <summary>判断响应正文是否是 HTML 页面（WebDAV 的正常响应只会是 XML）。</summary>
+    private static bool LooksLikeHtmlPage(string body)
+    {
+        var trimmed = body.TrimStart();
+        return trimmed.StartsWith("<!DOCTYPE html", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("<html", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 服务端返回 HTML 而不是 WebDAV XML 时的报错描述。
+    /// 识别阿里云 ESA/WAF 的 JS 挑战页（acw_sc__v2）特征，给出用户在防护控制台可操作的提示。
+    /// </summary>
+    private static string DescribeHtmlBody(string body)
+    {
+        var isAntiBot = body.Contains("acw_sc__v2", StringComparison.Ordinal)
+            || body.Contains("var arg1=", StringComparison.Ordinal);
+        return isAntiBot
+            ? "请求被服务器前置的 WAF/CDN 防护拦截（阿里云 ESA/WAF 的 JS 挑战或自动限流），应用无法执行其中的验证脚本。" +
+                "请在防护控制台为该域名添加「跳过」规则（Bot 管理 / JS 挑战 / 自动速率限制），" +
+                "或改用不经过防护的直连地址，也可以按本应用的 User-Agent「Music/1.0」放行。"
+            : "服务端返回了 HTML 页面而非 WebDAV XML，通常是地址填到了网页入口，或被前置防护 / 登录页拦截。";
     }
 
     /// <summary>把响应正文截断成一小段拼进报错，方便看出服务端到底返回了什么（HTML 登录页 / 网关错误页等）。</summary>

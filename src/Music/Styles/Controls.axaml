@@ -93,6 +93,26 @@
         <Setter Property="Opacity" Value="0.45" />
     </Style>
 
+    <!-- ============ 柔和按钮（与主按钮成对出现的次操作，同形状同字重） ============ -->
+    <Style Selector="Button.soft">
+        <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="18,10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.soft /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    </Style>
+    <Style Selector="Button.soft:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Opacity" Value="0.88" />
+    </Style>
+    <Style Selector="Button.soft:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
+
     <!-- ============ 次要按钮 ============ -->
     <Style Selector="Button.ghost">
         <Setter Property="Background" Value="Transparent" />

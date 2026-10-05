@@ -41,6 +41,7 @@ public partial class PlayerViewModel : ViewModelBase
     private readonly MetadataScrapeService _scraper;
     private readonly IAudioCache _cache;
     private readonly TrackDeleteService _deleteService;
+    private readonly SourceWriteBackService _writeBack;
     private readonly DispatcherTimer _saveTimer;
 
     private LyricDocument _lyrics = LyricDocument.Empty;
@@ -69,7 +70,8 @@ public partial class PlayerViewModel : ViewModelBase
         ISystemMediaService systemMedia,
         MetadataScrapeService scraper,
         IAudioCache cache,
-        TrackDeleteService deleteService)
+        TrackDeleteService deleteService,
+        SourceWriteBackService writeBack)
     {
         _playback = playback;
         _settings = settings;
@@ -80,6 +82,7 @@ public partial class PlayerViewModel : ViewModelBase
         _scraper = scraper;
         _cache = cache;
         _deleteService = deleteService;
+        _writeBack = writeBack;
 
         SearchProviders = scraper.Providers
             .Select(provider => new MetadataProviderOption(provider.Id, provider.DisplayName))
@@ -827,7 +830,11 @@ public partial class PlayerViewModel : ViewModelBase
 
             MetadataSearchStatusText = writeBack.Status switch
             {
-                WriteBackStatus.Succeeded => "已保存并写回音源。",
+                WriteBackStatus.Succeeded when writeBack.NewRemotePath is not null
+                    => $"已保存并写回音源，云端文件已按标题重命名。{writeBack.Message}",
+                WriteBackStatus.Succeeded => writeBack.Message.Length > 0
+                    ? $"已保存并写回音源。{writeBack.Message}"
+                    : "已保存并写回音源。",
                 WriteBackStatus.Failed => $"已保存到曲库，写回音源失败：{writeBack.Message}",
                 _ => writeBack.Message.Length > 0
                     ? $"已保存到曲库，未写回音源：{writeBack.Message}"
@@ -924,12 +931,32 @@ public partial class PlayerViewModel : ViewModelBase
             OnPropertyChanged(nameof(HasLyrics));
             _ = LoadLyricsAsync(track);
             _ = LoadFavoriteAsync(track);
+
+            // 切歌后播放代理会释放对上一首远端文件的句柄，借机重试清理之前删除失败的旧文件。
+            if (_writeBack.HasPendingDeletes)
+            {
+                _ = FlushPendingDeletesAfterSwitchAsync();
+            }
         }
 
         RefreshQueue();
         RaiseAll();
         UpdateLyricHighlight();
         Publish();
+    }
+
+    /// <summary>等播放代理释放上一首的句柄后再清理登记的远端旧文件；失败静默，下次切歌再试。</summary>
+    private async Task FlushPendingDeletesAfterSwitchAsync()
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            await _writeBack.FlushPendingDeletesAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // 后台清理失败不影响界面。
+        }
     }
 
     /// <summary>

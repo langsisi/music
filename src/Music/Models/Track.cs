@@ -6,15 +6,16 @@ namespace Music.Models;
 /// </summary>
 public sealed class Track
 {
-    public required string Id { get; init; }
+    /// <summary>跨音源稳定的唯一标识。远端文件按标题重命名后会被重新指派（路径哈希），因此可写。</summary>
+    public required string Id { get; set; }
 
     /// <summary>所属音源配置的 Id。</summary>
     public required string SourceId { get; init; }
 
     public required MusicSourceType SourceType { get; init; }
 
-    /// <summary>本地绝对路径，或远程 URI。</summary>
-    public required string Path { get; init; }
+    /// <summary>本地绝对路径，或远程 URI。远端文件按标题重命名后随 RemoteId 一起更新，因此可写。</summary>
+    public required string Path { get; set; }
 
     public string Title { get; set; } = string.Empty;
 

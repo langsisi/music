@@ -115,7 +115,7 @@ public sealed record MetadataProviderOption(string Id, string Name)
 /// <summary>在线元数据（封面 / 歌词）数据源。</summary>
 public interface IMetadataProvider
 {
-    /// <summary>数据源 Id：netease / qq / kugou / kuwo / migu / itunes。</summary>
+    /// <summary>数据源 Id：netease / qq / kugou / kuwo / itunes。</summary>
     string Id { get; }
 
     string DisplayName { get; }

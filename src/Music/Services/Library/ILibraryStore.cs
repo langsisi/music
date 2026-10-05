@@ -33,6 +33,18 @@ public interface ILibraryStore
     /// <summary>移除指定曲目，并一并清掉它们的收藏与归类关系（删除音乐时调用）。</summary>
     Task RemoveTracksAsync(IReadOnlyCollection<string> trackIds, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// 把曲目挪到新 Id（远端文件按标题重命名后调用）：更新主键 / RemoteId / Path，
+    /// 并把收藏与归类关系一并迁移到新 Id，保证下次同步（按路径哈希生成 Id）仍能对上。
+    /// 旧记录不存在或新 Id 已被占用时返回 false，不做任何改动。
+    /// </summary>
+    Task<bool> RekeyTrackAsync(
+        string oldId,
+        string newId,
+        string? remoteId,
+        string path,
+        CancellationToken cancellationToken = default);
+
     // ---------------- 收藏 ----------------
 
     /// <summary>已收藏的曲目 Id 集合，用于给列表批量打标记。</summary>

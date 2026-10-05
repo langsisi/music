@@ -24,7 +24,7 @@
     </UserControl.Styles>
 
     <!-- 全屏面板：覆盖「正在播放」页，可修正元数据后在指定数据源搜索并挑选结果 -->
-    <Grid RowDefinitions="Auto,*" Background="{DynamicResource AppBackgroundBrush}"
+    <Grid RowDefinitions="Auto,*,Auto" Background="{DynamicResource AppBackgroundBrush}"
           IsVisible="{Binding IsMetadataSearchOpen}">
 
         <!-- ============ 顶栏 ============ -->
@@ -40,7 +40,7 @@
                        HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Grid>
 
-        <ScrollViewer Grid.Row="1" Padding="20,0,20,24">
+        <ScrollViewer Grid.Row="1" Padding="20,0,20,10">
             <StackPanel Spacing="18">
 
                 <!-- ============ 基本信息（可编辑） ============ -->
@@ -79,7 +79,7 @@
                                                VerticalAlignment="Center" Width="72" />
                                     <TextBox Grid.Column="1" Text="{Binding SearchYear}"
                                              PlaceholderText="如 1991" />
-                                    <Button Grid.Column="2" Classes="ghost small" Margin="10,0,0,0"
+                                    <Button Grid.Column="2" Classes="accent small" Margin="10,0,0,0"
                                             Command="{Binding SaveSearchMetadataCommand}"
                                             Content="保存信息" />
                                 </Grid>
@@ -144,25 +144,34 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                        <Button Classes="accent" Grid.Column="0"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                Command="{Binding ApplySearchResultCommand}"
-                                Content="应用" />
-                        <Button Grid.Column="1"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                Command="{Binding SyncSearchResultCommand}"
-                                Content="同步" />
-                    </Grid>
                 </StackPanel>
-
-                <TextBlock Text="{Binding MetadataSearchStatusText}" Classes="muted"
-                           FontSize="12.5" TextWrapping="Wrap" />
 
             </StackPanel>
         </ScrollViewer>
+
+        <!-- ============ 底部操作区（固定，不随结果滚动） ============ -->
+        <!-- 「应用 / 同步」与进度文字常驻可见：结果再多也不会被推出视野，写回音源的百分比始终看得到。 -->
+        <Border Grid.Row="2" Padding="20,12,20,14"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                Background="{DynamicResource AppBackgroundBrush}">
+            <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8" IsVisible="{Binding IsSearchResultsVisible}">
+                    <Button Classes="accent" Grid.Column="0"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Command="{Binding ApplySearchResultCommand}"
+                            Content="应用" />
+                    <Button Classes="soft" Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Command="{Binding SyncSearchResultCommand}"
+                            Content="同步" />
+                </Grid>
+
+                <TextBlock Text="{Binding MetadataSearchStatusText}" Classes="muted"
+                           FontSize="12.5" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

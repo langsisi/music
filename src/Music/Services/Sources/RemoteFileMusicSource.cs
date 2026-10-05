@@ -64,7 +64,7 @@ public sealed class RemoteFileMusicSource : IMusicSource, IConnectionTestableMus
                 Id = TrackKey.Create(_config.Id, remotePath),
                 SourceId = _config.Id,
                 SourceType = _config.Type,
-                Path = BuildDisplayUri(remotePath),
+                Path = RemoteFileUri.BuildDisplayUri(_config, remotePath),
                 RemoteId = remotePath,
                 Title = Path.GetFileNameWithoutExtension(remotePath),
                 Album = Path.GetFileName(Path.GetDirectoryName(remotePath) ?? string.Empty),
@@ -84,21 +84,4 @@ public sealed class RemoteFileMusicSource : IMusicSource, IConnectionTestableMus
 
     /// <summary>远端路径统一成 '/' 形式，保证曲目 Id 在不同服务器写法下保持稳定。</summary>
     private static string NormalizeRemotePath(string path) => path.Replace('\\', '/');
-
-    /// <summary>用于界面展示的地址，取流时不使用该地址。</summary>
-    private string BuildDisplayUri(string remotePath)
-    {
-        var suffix = remotePath.StartsWith('/') ? remotePath : "/" + remotePath;
-
-        return _config switch
-        {
-            FtpSourceConfig ftp => $"ftp://{ftp.Host}:{ftp.Port}{suffix}",
-            SmbSourceConfig smb => $"smb://{smb.Host}/{smb.ShareName}{suffix}",
-            WebDavSourceConfig webDav => $"{webDav.BaseUrl.TrimEnd('/')}{NormalizeRoot(webDav.RootPath)}{suffix}",
-            _ => suffix,
-        };
-    }
-
-    private static string NormalizeRoot(string rootPath) =>
-        string.IsNullOrWhiteSpace(rootPath) || rootPath == "/" ? string.Empty : "/" + rootPath.Trim('/');
 }

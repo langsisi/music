@@ -258,6 +258,18 @@ public partial class SourcesViewModel : PageViewModel
     [RelayCommand]
     private async Task SaveSourceAsync()
     {
+        if (_editing is not null && !Sources.Contains(_editing))
+        {
+            // 编辑期间音源被删掉了（先点「删除」再点「保存并同步」）：
+            // 配置已不在列表里，直接收场——否则会把已移除的配置拿去同步，
+            // 整批曲目被重新插回曲库成为孤儿（配置不存在、重启才被清掉）。
+            _editing = null;
+            IsEditorOpen = false;
+            EditorStatusText = string.Empty;
+            StatusText = "该音源已被删除。";
+            return;
+        }
+
         if (!TryBuildSource(out var built, out var error))
         {
             EditorStatusText = error;
@@ -576,6 +588,17 @@ public partial class SourcesViewModel : PageViewModel
     private async Task Remove(MusicSourceConfig config)
     {
         Sources.Remove(config);
+
+        // 正在编辑的正是被删音源时，把编辑器一并关掉：
+        // 否则编辑器还挂着这份已移除的配置，随后的「保存并同步」会把它拿去重新同步，
+        // 曲目被整批插回曲库变成孤儿曲目。
+        if (ReferenceEquals(_editing, config))
+        {
+            _editing = null;
+            IsEditorOpen = false;
+            EditorStatusText = string.Empty;
+        }
+
         await _libraryStore.RemoveSourceTracksAsync(config.Id);
         await _settings.SaveAsync();
         StatusText = $"已移除 {config.DisplayName}";

@@ -52,3 +52,14 @@ public interface IRemoteFileClient : IAsyncDisposable
     /// <summary>删除远端文件；文件不存在时视为成功。</summary>
     Task DeleteAsync(string remotePath, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// 可选能力接口：支持在服务端直接重命名文件的客户端（WebDAV 的 MOVE）。
+/// 按标题改名写回时优先走这里——旧文件由服务器原地改名消失，不需要「上传新文件 + 删除旧文件」，
+/// 即使旧文件正被播放代理占用也不受影响。调用方需用 <c>is</c> 判断客户端是否支持。
+/// </summary>
+public interface IRemoteFileMoveClient
+{
+    /// <summary>把远端文件 <paramref name="remotePath"/> 改名为 <paramref name="destinationPath"/>；失败时抛异常。</summary>
+    Task MoveAsync(string remotePath, string destinationPath, CancellationToken cancellationToken);
+}
