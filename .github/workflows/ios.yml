@@ -35,6 +35,19 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      # 最新 iOS workload（Microsoft.iOS.Sdk 27.0.x）要求 Xcode 27.0，
+      # 而 runner 默认选中的 Xcode 可能是 26.x，必须先切换。
+      - name: Select Xcode 27
+        run: |
+          ls -d /Applications/Xcode*.app
+          if [ -d /Applications/Xcode_27.0.app ]; then
+            sudo xcode-select -s /Applications/Xcode_27.0.app
+          else
+            echo "::error::runner 上没有 Xcode_27.0.app，请改用上面列表中的匹配版本"
+            exit 1
+          fi
+          xcodebuild -version
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
