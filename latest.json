@@ -1,8 +1,8 @@
 {
-    "version":  "1.2.3",
-    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.3/Music-1.2.3.zip",
-    "sha256":  "880a9e46088b4bf1ee974501805ceec50880144041269ee1347f34f63e9e54dd",
-    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.3/Music-1.2.3.apk",
-    "androidSha256":  "4d98cb5f4409bc849db26d760561f520003c498965baabc6930ab138dd8cd9e4",
-    "notes":  "同步同时加载歌词"
+    "version":  "1.2.4",
+    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.4/Music-1.2.4.zip",
+    "sha256":  "39e841ba890a38820b09540902e82eab73c88b362ad5a13cfafc9b3b3160c461",
+    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.4/Music-1.2.4.apk",
+    "androidSha256":  "1bf55070c4280ac3a3595399233d4a6e6c08e68965b0103c0124e027d9156d01",
+    "notes":  "音乐库增加标签知道是什么音源"
 }
