@@ -1,0 +1,105 @@
+name: Build Android (APK)
+
+# 安卓端 CI/CD：产出 arm64 Release APK。
+# 触发：手动 Run workflow（可传版本号）或推送 android-v* 标签。
+#
+# 签名说明（可选）：
+#   - 未配置 secrets 时产出「未签名」APK，需要本地用 apksigner / 爱思等工具签名后安装；
+#   - 配置以下 secrets 后自动出已签名 APK，可直接安装/升级（同一 keystore 才能覆盖安装）：
+#       ANDROID_KEYSTORE_BASE64   keystore 文件的 base64（certutil -encode xxx.jks out.txt 后取正文）
+#       ANDROID_KEYSTORE_PASSWORD keystore 密码（= key 密码，两个参数同值）
+#       ANDROID_KEY_ALIAS         key 别名
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 应用版本号（留空则使用 csproj 中的版本）
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'android-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # .NET Android 构建依赖 JDK 17
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+          cache: true
+          cache-dependency-path: '**/Directory.Packages.props'
+
+      - name: Install Android workload (pinned to 10.0.401 set)
+        run: dotnet workload install android --version 10.0.401
+
+      # csproj 已设 RuntimeIdentifiers=android-arm64（复数属性，libvlc targets 只认它）；
+      # EmbedAssembliesIntoApk=true 保证托管程序集打进 APK，拷贝安装也能独立运行。
+      - name: Build APK
+        env:
+          APP_VERSION: ${{ inputs.version }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          VERSION_ARG=""
+          if [ -n "${APP_VERSION}" ]; then
+            VERSION_ARG="-p:Version=${APP_VERSION} -p:ApplicationDisplayVersion=${APP_VERSION}"
+          fi
+
+          SIGN_ARG=""
+          if [ -n "${KEYSTORE_B64}" ]; then
+            if [ -z "${KEYSTORE_PASS}" ] || [ -z "${KEY_ALIAS}" ]; then
+              echo "::error::配置了 ANDROID_KEYSTORE_BASE64 就必须同时配置 PASSWORD 和 ALIAS"
+              exit 1
+            fi
+            echo "$KEYSTORE_B64" | base64 -d > signing.keystore
+            SIGN_ARG="-p:AndroidKeyStore=true -p:AndroidSigningKeyStore=$(pwd)/signing.keystore -p:AndroidSigningKeyPass=${KEYSTORE_PASS} -p:AndroidSigningStorePass=${KEYSTORE_PASS} -p:AndroidSigningKeyAlias=${KEY_ALIAS}"
+          else
+            echo "未配置签名 secrets，产出未签名 APK。"
+          fi
+
+          dotnet publish src/Music.Android/Music.Android.csproj \
+            -c Release \
+            -f net10.0-android \
+            ${VERSION_ARG} ${SIGN_ARG}
+
+      - name: Inspect APK
+        run: |
+          set -euo pipefail
+          APK=$(find src/Music.Android/bin -name '*.apk' -print -quit)
+          if [ -z "$APK" ]; then
+            echo "::error::没有找到 .apk，请检查上面的构建日志"
+            exit 1
+          fi
+          echo "APK: $APK"
+          sha256sum "$APK"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZMusic-android-arm64
+          path: src/Music.Android/bin/**/*.apk
+          if-no-files-found: error
+          retention-days: 30

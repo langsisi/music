@@ -1,0 +1,133 @@
+name: Build Desktop (Windows/macOS/Linux)
+
+# 桌面端三平台 CI/CD：matrix 一次产出 win-x64 / osx-arm64 / osx-x64 / linux-x64
+# 四个自包含压缩包（开箱即用，无需安装 .NET 运行时）。
+# 触发：手动 Run workflow（可传版本号）或推送 desktop-v* 标签。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 应用版本号（留空则使用 csproj 中的版本）
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'desktop-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      # 一个平台失败不影响其他平台出包
+      fail-fast: false
+      matrix:
+        include:
+          # Windows 用专用 TFM（WinRT/DPAPI 支持，csproj 内已内置 win-x64 RID）；
+          # libvlc native 只发 x64/x86，故保持 x64。
+          - os: windows-latest
+            rid: win-x64
+            tfm: net10.0-windows10.0.19041.0
+            archive: zip
+          - os: macos-latest
+            rid: osx-arm64
+            tfm: net10.0
+            archive: zip
+          - os: macos-latest
+            rid: osx-x64
+            tfm: net10.0
+            archive: zip
+          - os: ubuntu-latest
+            rid: linux-x64
+            tfm: net10.0
+            archive: tar.gz
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+          cache: true
+          cache-dependency-path: '**/Directory.Packages.props'
+
+      # 自包含发布（--self-contained）：产物自带运行时，用户解压即用。
+      # Music.Desktop 禁用了 single-file（libvlc 的插件目录树不支持），所以是目录包。
+      - name: Publish (${{ matrix.rid }})
+        env:
+          APP_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_ARG=""
+          if [ -n "${APP_VERSION}" ]; then
+            VERSION_ARG="-p:Version=${APP_VERSION}"
+          fi
+          dotnet publish src/Music.Desktop/Music.Desktop.csproj \
+            -c Release \
+            -f ${{ matrix.tfm }} \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -o out \
+            ${VERSION_ARG}
+
+      # 附一份运行说明：三平台启动方式不同，Linux 还需系统装 libvlc
+      - name: Write usage note
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Windows)
+              NOTE="解压后双击 Music.Desktop.exe 运行。"
+              ;;
+            macOS)
+              NOTE="解压后在终端运行: ./Music.Desktop
+首次运行如被 Gatekeeper 拦截，请到「系统设置→隐私与安全性」点击「仍要打开」。
+（未做 .app 打包与签名，直接从终端启动最省事。）"
+              ;;
+            Linux)
+              NOTE="解压后在终端运行: ./Music.Desktop
+播放功能依赖系统 libvlc，Debian/Ubuntu 安装: sudo apt install libvlc5 vlc-plugins-base"
+              ;;
+          esac
+          printf '%s\n' "$NOTE" > out/使用说明.txt
+
+      - name: Pack (zip)
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd out
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            pwsh -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../ZMusic-${{ matrix.rid }}.zip"
+          else
+            # zip 会保留可执行位，macOS 下载解压后可直接 ./Music.Desktop
+            zip -qr ../ZMusic-${{ matrix.rid }}.zip .
+          fi
+
+      - name: Pack (tar.gz)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd out
+          tar -czf ../ZMusic-${{ matrix.rid }}.tar.gz .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZMusic-${{ matrix.rid }}
+          path: |
+            ZMusic-${{ matrix.rid }}.zip
+            ZMusic-${{ matrix.rid }}.tar.gz
+          if-no-files-found: error
+          retention-days: 30
