@@ -30,20 +30,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # .NET for iOS 的 workload 与 Xcode 版本强绑定。
-      # 若后续报 “Xcode version is not supported”，把 runs-on 固定到与 workload 匹配的镜像即可。
+      # .NET for iOS 的 workload 与 Xcode 版本强绑定（aka.ms/xcode-requirement）。
+      # runner 最高只有 Xcode 26.6.x（尚无 27.0），因此锁定组合：
+      #   .NET SDK 10.0.401 + workload set 10.0.401 → Microsoft.iOS 26.5.10318（要求 Xcode 26.5）
+      # workload set 与 Xcode 的对应关系见 https://github.com/dotnet/macios/releases
       - name: Show Xcode version
         run: xcodebuild -version
 
-      # 最新 iOS workload（Microsoft.iOS.Sdk 27.0.x）要求 Xcode 27.0，
-      # 而 runner 默认选中的 Xcode 可能是 26.x，必须先切换。
-      - name: Select Xcode 27
+      - name: Select Xcode 26.5
         run: |
-          ls -d /Applications/Xcode*.app
-          if [ -d /Applications/Xcode_27.0.app ]; then
-            sudo xcode-select -s /Applications/Xcode_27.0.app
+          if [ -d /Applications/Xcode_26.5.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.5.app
           else
-            echo "::error::runner 上没有 Xcode_27.0.app，请改用上面列表中的匹配版本"
+            ls -d /Applications/Xcode*.app
+            echo "::error::未找到 Xcode_26.5.app，请按上面列表调整"
             exit 1
           fi
           xcodebuild -version
@@ -51,12 +51,12 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.0.401'
           cache: true
           cache-dependency-path: '**/Directory.Packages.props'
 
-      - name: Install iOS workload
-        run: dotnet workload install ios
+      - name: Install iOS workload (pinned to Xcode 26.5 set)
+        run: dotnet workload install ios --version 10.0.401
 
       - name: Restore
         run: dotnet restore src/Music.iOS/Music.iOS.csproj
