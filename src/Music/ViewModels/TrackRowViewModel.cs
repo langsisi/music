@@ -51,6 +51,13 @@ public partial class TrackRowViewModel : ObservableObject
     /// </summary>
     public ICommand? DeleteCommand { get; init; }
 
+    /// <summary>弹层里没有任何分类时，就地新建一个并加入本曲目（同样因为弹层取不到页面命令）。</summary>
+    public ICommand? CreateCategoryCommand { get; init; }
+
+    /// <summary>弹层内「新建分类」输入的名称。</summary>
+    [ObservableProperty]
+    private string _newCategoryName = string.Empty;
+
     // ---------------- 收藏（写入由页面统一发起，见 LibraryViewModel） ----------------
 
     [ObservableProperty]

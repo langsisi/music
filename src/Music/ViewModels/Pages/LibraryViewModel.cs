@@ -200,6 +200,31 @@ public partial class LibraryViewModel : PageViewModel
             ? _libraryStore.AddTrackToCategoryAsync(categoryId, trackId)
             : _libraryStore.RemoveTrackFromCategoryAsync(categoryId, trackId));
 
+    /// <summary>
+    /// 弹层里还没有任何分类时使用：就地新建一个分类，并把该曲目直接加入。
+    /// 菜单在弹层内取不到页面命令，因此由行上的 <c>CreateCategoryCommand</c> 代理到这里。
+    /// </summary>
+    [RelayCommand]
+    private async Task CreateCategoryAndAddAsync(TrackRowViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        var name = row.NewCategoryName?.Trim() ?? string.Empty;
+        if (name.Length == 0)
+        {
+            return;
+        }
+
+        var created = await WriteAsync(() => _libraryStore.CreateCategoryAsync(name));
+        row.NewCategoryName = string.Empty;
+        await WriteAsync(() => _libraryStore.AddTrackToCategoryAsync(created.Id, row.Id));
+
+        await RefreshFiltersAsync();
+    }
+
     /// <summary>执行一次本页发起的写入，期间忽略由它自己触发的 Changed。</summary>
     private async Task<T> WriteAsync<T>(Func<Task<T>> action)
     {
@@ -293,6 +318,7 @@ public partial class LibraryViewModel : PageViewModel
             {
                 IsFavorite = favoriteIds.Contains(track.Id),
                 DeleteCommand = DeleteTrackCommand,
+                CreateCategoryCommand = CreateCategoryAndAddCommand,
             };
 
             row.SetCategories(_categories, categoryMap.GetValueOrDefault(track.Id) ?? []);

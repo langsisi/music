@@ -1,0 +1,92 @@
+name: Build iOS (unsigned IPA)
+
+# iOS 只能在 macOS 上构建，Windows/Ubuntu runner 无法交叉编译。
+# 本工作流产出一个「免签名」.ipa，用于 AltStore / Sideloadly 侧载，
+# 不需要付费 Apple Developer 账号。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 应用版本号（留空则使用 Music.iOS.csproj 中的版本）
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'ios-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # .NET for iOS 的 workload 与 Xcode 版本强绑定。
+      # 若后续报 “Xcode version is not supported”，把 runs-on 固定到与 workload 匹配的镜像即可。
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/Directory.Packages.props'
+
+      - name: Install iOS workload
+        run: dotnet workload install ios
+
+      - name: Restore
+        run: dotnet restore src/Music.iOS/Music.iOS.csproj
+
+      # 关键点：RNID=ios-arm64 出真机包；把 CodesignKey / CodesignProvision 置空
+      # 并关闭「必须提供描述文件」，即得到可用于侧载的未签名包。
+      # 命令行传的全局属性优先级高于 csproj 里的 <CodesignKey>iPhone Developer</CodesignKey>。
+      - name: Build unsigned IPA
+        env:
+          APP_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION_ARG=""
+          if [ -n "${APP_VERSION}" ]; then
+            VERSION_ARG="-p:Version=${APP_VERSION} -p:ApplicationDisplayVersion=${APP_VERSION}"
+          fi
+          dotnet publish src/Music.iOS/Music.iOS.csproj \
+            -c Release \
+            -f net10.0-ios \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:BuildIpa=true \
+            -p:CodesignKey="" \
+            -p:CodesignProvision="" \
+            -p:CodesignRequireProvisioningProfile=false \
+            -p:_RequireCodeSigning=false \
+            ${VERSION_ARG}
+
+      - name: Inspect IPA
+        run: |
+          set -euo pipefail
+          IPA=$(find src/Music.iOS/bin -name '*.ipa' -print -quit)
+          if [ -z "$IPA" ]; then
+            echo "::error::没有找到 .ipa，请检查上面的构建日志"
+            exit 1
+          fi
+          echo "IPA: $IPA"
+          shasum -a 256 "$IPA"
+          unzip -l "$IPA"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Music-iOS-unsigned-ipa
+          path: src/Music.iOS/bin/**/*.ipa
+          if-no-files-found: error
+          retention-days: 30

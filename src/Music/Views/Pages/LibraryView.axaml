@@ -131,7 +131,7 @@
                                     Background="{DynamicResource AccentBrush}"
                                     CornerRadius="10"
                                     IsVisible="{Binding $parent[ListBox].((pages:LibraryViewModel)DataContext).IsCompact}">
-                                <Grid IsVisible="{Binding HasCategories}">
+                                <Grid>
                                     <StackPanel HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
                                                 Spacing="2">
@@ -149,24 +149,42 @@
                                             ToolTip.Tip="加入分类">
                                         <Button.Flyout>
                                             <Flyout Placement="Bottom">
-                                                <ItemsControl ItemsSource="{Binding Categories}"
-                                                              MinWidth="160">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="vm:TrackCategoryItem">
-                                                            <Button Classes="bare"
-                                                                    Command="{Binding ToggleCommand}">
-                                                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                                                    <Path Data="{Binding MarkIcon}"
-                                                                          Fill="{DynamicResource AccentBrush}"
-                                                                          Width="16" Height="16" Stretch="Uniform"
-                                                                          VerticalAlignment="Center" />
-                                                                    <TextBlock Text="{Binding Name}" FontSize="13"
-                                                                               VerticalAlignment="Center" />
-                                                                </StackPanel>
-                                                            </Button>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
+                                                <StackPanel MinWidth="170" Spacing="8">
+                                                    <!-- 已有分类：直接勾选加入 / 移出 -->
+                                                    <ItemsControl ItemsSource="{Binding Categories}"
+                                                                  IsVisible="{Binding HasCategories}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:TrackCategoryItem">
+                                                                <Button Classes="bare"
+                                                                        Command="{Binding ToggleCommand}">
+                                                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                                                        <Path Data="{Binding MarkIcon}"
+                                                                              Fill="{DynamicResource AccentBrush}"
+                                                                              Width="16" Height="16" Stretch="Uniform"
+                                                                              VerticalAlignment="Center" />
+                                                                        <TextBlock Text="{Binding Name}" FontSize="13"
+                                                                                   VerticalAlignment="Center" />
+                                                                    </StackPanel>
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <!-- 还没有任何分类：就地新建一个并直接加入本曲目 -->
+                                                    <StackPanel Spacing="8" IsVisible="{Binding !HasCategories}">
+                                                        <TextBlock Text="还没有分类，先建一个"
+                                                                   FontSize="12.5" TextWrapping="Wrap"
+                                                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                        <TextBox Text="{Binding NewCategoryName}"
+                                                                 MinHeight="34"
+                                                                 PlaceholderText="新分类名称" />
+                                                        <Button Classes="accent small"
+                                                                Content="新建并加入"
+                                                                MinWidth="0"
+                                                                Command="{Binding CreateCategoryCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                    </StackPanel>
+                                                </StackPanel>
                                             </Flyout>
                                         </Button.Flyout>
                                     </Button>

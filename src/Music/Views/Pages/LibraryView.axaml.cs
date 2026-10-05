@@ -34,9 +34,12 @@ public partial class LibraryView : UserControl
 
     public LibraryView() => InitializeComponent();
 
-    /// <summary>只有手机（紧凑）布局，且该行可删除或可加入分类时才允许滑动。</summary>
+    /// <summary>
+    /// 手机（紧凑）布局下每一行都可滑动：右滑「加入分类」恒可用（没有分类时弹层里可就地新建），
+    /// 左滑「删除」由 <see cref="TrackRowViewModel.CanDelete"/> 单独门控（Navidrome 不可删）。
+    /// </summary>
     private static bool CanSwipe(Control content, bool compact)
-        => compact && content.DataContext is TrackRowViewModel { CanDelete: true } or TrackRowViewModel { HasCategories: true };
+        => compact && content.DataContext is TrackRowViewModel;
 
     private void OnRowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -51,7 +54,8 @@ public partial class LibraryView : UserControl
 
         var row = (TrackRowViewModel)content.DataContext!;
         _allowLeft = row.CanDelete;
-        _allowRight = row.Categories.Count > 0;
+        // 右滑恒可用：即使当前没有任何分类，弹层里也能就地新建并加入。
+        _allowRight = true;
 
         _dragContent = content;
         _dragTransform = content.RenderTransform as TranslateTransform;
