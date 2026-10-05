@@ -85,21 +85,30 @@ jobs:
             -f net10.0-android \
             ${VERSION_ARG} ${SIGN_ARG}
 
-      - name: Inspect APK
+      # publish 会在 bin 下留下多个 apk（未签名中间产物 + 最终签名产物），
+      # artifact 只能放最终的那一个，否则体积成倍膨胀。
+      - name: Collect APK
         run: |
           set -euo pipefail
-          APK=$(find src/Music.Android/bin -name '*.apk' -print -quit)
+          echo "== bin 下所有 apk（含中间产物）=="
+          find src/Music.Android/bin -name '*.apk' -exec ls -lh {} \;
+          # 优先取最终签名包；没有则按修改时间取最新的 apk
+          APK=$(find src/Music.Android/bin -name '*-Signed.apk' -print -quit)
+          if [ -z "$APK" ]; then
+            APK=$(find src/Music.Android/bin -name '*.apk' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
+          fi
           if [ -z "$APK" ]; then
             echo "::error::没有找到 .apk，请检查上面的构建日志"
             exit 1
           fi
-          echo "APK: $APK"
-          sha256sum "$APK"
+          echo "选用: $APK"
+          cp "$APK" ZMusic-android-arm64.apk
+          sha256sum ZMusic-android-arm64.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ZMusic-android-arm64
-          path: src/Music.Android/bin/**/*.apk
+          path: ZMusic-android-arm64.apk
           if-no-files-found: error
           retention-days: 30
