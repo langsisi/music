@@ -2,6 +2,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFrameworks>net10.0-windows10.0.19041.0;net10.0</TargetFrameworks>
+    <!-- 允许在 macOS/Linux 上还原/构建 Windows TFM（CI 交叉编译，NETSDK1100） -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <!-- 应用版本号，在线升级靠它判断新旧；发布新版本时用 scripts/publish-release.ps1 覆盖。 -->
