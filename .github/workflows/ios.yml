@@ -69,6 +69,9 @@ jobs:
       # 关键点：RNID=ios-arm64 出真机包；把 CodesignKey / CodesignProvision 置空
       # 并关闭「必须提供描述文件」，即得到可用于侧载的未签名包。
       # 命令行传的全局属性优先级高于 csproj 里的 <CodesignKey>iPhone Developer</CodesignKey>。
+      # ValidateXcodeVersion=false：workload 的 Xcode 检查是「与推荐版本 major.minor 严格相等」，
+      # 即使 DEVELOPER_DIR 已指向 Xcode_26.5.app 仍会误报（报错里要求 26.5、检测到 26.5，却判不等）。
+      # 微软留了这个开关；Xcode 26.6 SDK 是 26.5 的超集，跳过检查后构建产物不受影响。
       - name: Build unsigned IPA
         env:
           APP_VERSION: ${{ inputs.version }}
@@ -87,6 +90,7 @@ jobs:
             -p:CodesignProvision="" \
             -p:CodesignRequireProvisioningProfile=false \
             -p:_RequireCodeSigning=false \
+            -p:ValidateXcodeVersion=false \
             ${VERSION_ARG}
 
       - name: Inspect IPA
