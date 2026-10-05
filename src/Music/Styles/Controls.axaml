@@ -88,6 +88,10 @@
     <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Opacity" Value="0.88" />
     </Style>
+    <!-- 禁用态置灰（如空分类下的「播放全部」常驻显示时） -->
+    <Style Selector="Button.accent:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
 
     <!-- ============ 次要按钮 ============ -->
     <Style Selector="Button.ghost">

@@ -48,9 +48,10 @@
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                         VerticalAlignment="Center" Margin="10,0,0,0">
+                <!-- 常驻显示、无曲目时置灰：避免空分类下按钮突然消失导致布局跳动 -->
                 <Button Classes="accent small" Content="播放全部"
                         MinWidth="88"
-                        IsVisible="{Binding HasTracks}"
+                        IsEnabled="{Binding HasTracks}"
                         Command="{Binding PlayAllCommand}" />
                 <Button Classes="icon" Width="36" Height="36"
                         ToolTip.Tip="删除当前分类"
