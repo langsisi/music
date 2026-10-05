@@ -82,24 +82,26 @@ jobs:
             ${VERSION_ARG}
 
       # 附一份运行说明：三平台启动方式不同，Linux 还需系统装 libvlc
+      # 注意：说明文案用逐行 echo，不能写 0 缩进的多行字符串（会截断 YAML 块标量）
       - name: Write usage note
         shell: bash
         run: |
-          case "${{ runner.os }}" in
-            Windows)
-              NOTE="解压后双击 Music.Desktop.exe 运行。"
-              ;;
-            macOS)
-              NOTE="解压后在终端运行: ./Music.Desktop
-首次运行如被 Gatekeeper 拦截，请到「系统设置→隐私与安全性」点击「仍要打开」。
-（未做 .app 打包与签名，直接从终端启动最省事。）"
-              ;;
-            Linux)
-              NOTE="解压后在终端运行: ./Music.Desktop
-播放功能依赖系统 libvlc，Debian/Ubuntu 安装: sudo apt install libvlc5 vlc-plugins-base"
-              ;;
-          esac
-          printf '%s\n' "$NOTE" > out/使用说明.txt
+          {
+            case "${{ runner.os }}" in
+              Windows)
+                echo "解压后双击 Music.Desktop.exe 运行。"
+                ;;
+              macOS)
+                echo "解压后在终端运行: ./Music.Desktop"
+                echo "首次运行如被 Gatekeeper 拦截，请到「系统设置→隐私与安全性」点击「仍要打开」。"
+                echo "（未做 .app 打包与签名，直接从终端启动最省事。）"
+                ;;
+              Linux)
+                echo "解压后在终端运行: ./Music.Desktop"
+                echo "播放功能依赖系统 libvlc，Debian/Ubuntu 安装: sudo apt install libvlc5 vlc-plugins-base"
+                ;;
+            esac
+          } > out/使用说明.txt
 
       - name: Pack (zip)
         if: runner.os != 'Linux'
