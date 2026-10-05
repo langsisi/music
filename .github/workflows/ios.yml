@@ -26,6 +26,11 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
 
+    env:
+      # GitHub 的 macOS 镜像用 DEVELOPER_DIR 指定默认 Xcode，其优先级高于
+      # xcode-select；必须用它才能让构建真正用上 26.5（runner 无 27.0）。
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
