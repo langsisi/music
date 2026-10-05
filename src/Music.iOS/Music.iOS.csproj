@@ -60,4 +60,19 @@
          LibVLCSharp，避免其 iOS 资产的 P/Invoke 触发 DynamicMobileVLCKit 框架链接。 -->
     <ProjectReference Include="..\Music\Music.csproj" AdditionalProperties="ExcludeLibVlc=true" />
   </ItemGroup>
+
+  <!-- LibVLCSharp 兜底剥离。
+       AdditionalProperties 只能到达内层编译（EXCLUDE_LIBVLC 宏生效），传不进内层
+       NuGet restore——Music/obj/project.assets.json 仍含 LibVLCSharp，于是这个
+       无代码引用的孤儿程序集一直躺在发布清单里。原先 TrimMode=partial 时 ILLink
+       会把它整个裁掉，掩盖了泄漏；改 MtouchLink=None 后它存活到原生链接，
+       其 @rpath/DynamicMobileVLCKit.framework P/Invoke 触发
+       -framework DynamicMobileVLCKit → ld: framework not found（真机/模拟器通杀）。
+       在发布清单生成后直接剥离，不再依赖裁剪行为或 restore 属性流。 -->
+  <Target Name="_StripLibVlcFromPublishList" AfterTargets="ComputeResolvedFileToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(ResolvedFileToPublish.NuGetPackageId)' == 'LibVLCSharp'" />
+    </ItemGroup>
+  </Target>
 </Project>
