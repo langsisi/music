@@ -6,6 +6,14 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
 
+    <!-- AOT/裁剪编译期分析器：构建时扫描本仓库源码的 RequiresDynamicCode/反射风险点，
+         CI 日志直接给出清单（IL3050/IL2026 等）。注意只覆盖自研代码，
+         NuGet 库与 framework 内部扫不到——黑屏炸点在 framework 内部，
+         只能靠下方 MtouchLink=None 解决；将来收紧裁剪时再按此清单逐项处理。 -->
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+
     <!-- 不依赖 ICU 全球化数据：真机 AOT/裁剪包曾疑似因 ICU 缺失导致 culture 格式化
          抛异常（startup.log/crash.log 均未写出）。中文显示走 CoreText 不受影响，
          全代码库无 GetCultureInfo/new CultureInfo 用法，改为不变全球化是安全的。 -->
