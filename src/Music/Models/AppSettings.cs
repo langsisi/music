@@ -11,12 +11,6 @@ public sealed class AppSettings
     /// <summary>音频缓存上限（MB），0 表示不缓存。</summary>
     public double CacheLimitMb { get; set; } = 2048;
 
-    /// <summary>
-    /// 在线元数据刮削后，是否把封面与歌词写回音源本身（本地文件 / FTP / SMB / WebDAV）。
-    /// Navidrome 不支持上传，始终跳过。
-    /// </summary>
-    public bool ScrapeWriteBack { get; set; } = true;
-
     public double Volume { get; set; } = 80;
 
     /// <summary>是否开启歌词广播服务（局域网内手机/外部设备可访问）。</summary>

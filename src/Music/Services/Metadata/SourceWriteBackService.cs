@@ -54,7 +54,6 @@ public sealed record WriteBackResult(WriteBackStatus Status, string Message)
 /// <item>FTP/SMB/WebDAV：下载原文件到缓存临时文件 → 改写标签 → 覆盖上传，同时上传同名 <c>.lrc</c>。</item>
 /// <item>Navidrome（接口不支持上传）与在线曲目（无实体文件）：跳过。</item>
 /// </list>
-/// 是否启用由 <see cref="AppSettings.ScrapeWriteBack"/> 控制（默认开启）；
 /// 全程不抛异常，超时降级为失败文案。
 /// </summary>
 public sealed class SourceWriteBackService
@@ -90,11 +89,6 @@ public sealed class SourceWriteBackService
         IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        if (!_settings.Current.ScrapeWriteBack)
-        {
-            return new WriteBackResult(WriteBackStatus.Skipped, "设置页「刮削时写回音源」已关闭。");
-        }
-
         if (coverBytes is null
             && string.IsNullOrWhiteSpace(lyrics)
             && string.IsNullOrWhiteSpace(title)

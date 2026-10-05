@@ -18,7 +18,7 @@ public sealed record ScrapeResult(bool CoverUpdated, bool LyricsUpdated, string 
 /// <summary>
 /// 在线元数据刮削：先按数据源搜索候选，再由用户选定某一条后下载封面/歌词，
 /// 缓存到本地（封面 / 歌词缓存）并落库更新封面路径与用户编辑过的元数据；
-/// 若开启 <c>ScrapeWriteBack</c>，还会把封面与歌词写回音源本身（本地文件 / FTP / SMB / WebDAV）。
+/// 点「保存信息」时把封面与歌词写回音源本身（本地文件 / FTP / SMB / WebDAV）。
 /// </summary>
 public sealed class MetadataScrapeService
 {

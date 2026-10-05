@@ -199,23 +199,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- 刮削写回：把封面 / 歌词直接写回音源本身 -->
-                    <Border Classes="setrow">
-                        <Grid ColumnDefinitions="Auto,*,Auto">
-                            <Path Grid.Column="0" Classes="seticon"
-                                  Data="{x:Static controls:AppIcons.Sources}"
-                                  Margin="0,0,14,0" />
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Text="刮削时写回音源" FontSize="15" />
-                                <TextBlock FontSize="12" Classes="muted" TextWrapping="Wrap"
-                                           Text="应用在线封面 / 歌词后，直接写入音频文件标签并生成同名 .lrc（Navidrome 与在线曲目除外）。" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          OnContent="已开启" OffContent="已关闭"
-                                          IsChecked="{Binding ScrapeWriteBack}" />
-                        </Grid>
-                    </Border>
-
                     <!-- 扫描进度 / 状态 -->
                     <StackPanel IsVisible="{Binding Sources.IsBusy}" Spacing="8" Margin="16,12,16,14">
                         <TextBlock Text="{Binding Sources.StatusText}" FontSize="12"

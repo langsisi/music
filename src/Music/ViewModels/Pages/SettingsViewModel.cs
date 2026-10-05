@@ -48,7 +48,6 @@ public partial class SettingsViewModel : PageViewModel
         CacheLimitMb = settings.Current.CacheLimitMb;
         BroadcastEnabled = settings.Current.BroadcastEnabled;
         BroadcastPort = settings.Current.BroadcastPort;
-        ScrapeWriteBack = settings.Current.ScrapeWriteBack;
         _loading = false;
 
         _ = RefreshCacheStatsAsync();
@@ -186,23 +185,6 @@ public partial class SettingsViewModel : PageViewModel
     private string _broadcastUrlText = string.Empty;
 
     public string VersionText => UpdateService.CurrentVersionText;
-
-    // ---------------- 刮削写回 ----------------
-
-    /// <summary>应用在线封面 / 歌词后，是否写回音源本身（本地文件 / FTP / SMB / WebDAV）。</summary>
-    [ObservableProperty]
-    private bool _scrapeWriteBack = true;
-
-    partial void OnScrapeWriteBackChanged(bool value)
-    {
-        if (_loading)
-        {
-            return;
-        }
-
-        _settings.Current.ScrapeWriteBack = value;
-        Save();
-    }
 
     // ---------------- 在线升级 ----------------
 
