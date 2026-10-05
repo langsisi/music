@@ -38,6 +38,14 @@ public partial class TrackRowViewModel : ObservableObject
 
     public string Subtitle => Track.Subtitle;
 
+    /// <summary>音源显示名，由页面按曲目来源解析后注入，用于区分来自不同音源的同名曲目。</summary>
+    public string SourceName { get; init; } = string.Empty;
+
+    /// <summary>副标题（歌手 · 专辑）后追加音源名，便于发现同一首歌在不同音源的重复记录。</summary>
+    public string SubtitleWithSource => string.IsNullOrEmpty(SourceName)
+        ? Subtitle
+        : string.IsNullOrEmpty(Subtitle) ? SourceName : $"{Subtitle} · {SourceName}";
+
     public string DurationText => Track.DurationText;
 
     public string? CoverPath => Track.CoverPath;

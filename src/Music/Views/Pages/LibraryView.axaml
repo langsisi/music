@@ -212,7 +212,7 @@
                                     <TextBlock Text="{Binding DisplayTitle}" FontSize="13.5"
                                                TextTrimming="CharacterEllipsis"
                                                Foreground="{DynamicResource TextPrimaryBrush}" />
-                                    <TextBlock Text="{Binding Subtitle}" FontSize="12"
+                                    <TextBlock Text="{Binding SubtitleWithSource}" FontSize="12"
                                                TextTrimming="CharacterEllipsis"
                                                Foreground="{DynamicResource TextSecondaryBrush}" />
                                 </StackPanel>

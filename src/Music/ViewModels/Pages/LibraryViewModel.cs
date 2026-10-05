@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Music.Models;
+using Music.Services;
 using Music.Services.Audio;
 using Music.Services.Library;
 using Music.Services.Sources;
@@ -18,6 +19,7 @@ public partial class LibraryViewModel : PageViewModel
     private readonly ILibraryStore _libraryStore;
     private readonly PlaybackService _playback;
     private readonly TrackDeleteService _deleteService;
+    private readonly ISettingsStore _settings;
 
     /// <summary>本页自己发起的写入同样会触发 Changed，此时不需要重建列表（否则滚动位置会被重置）。</summary>
     private bool _writeInProgress;
@@ -27,11 +29,13 @@ public partial class LibraryViewModel : PageViewModel
     public LibraryViewModel(
         ILibraryStore libraryStore,
         PlaybackService playback,
-        TrackDeleteService deleteService)
+        TrackDeleteService deleteService,
+        ISettingsStore settings)
     {
         _libraryStore = libraryStore;
         _playback = playback;
         _deleteService = deleteService;
+        _settings = settings;
 
         _libraryStore.Changed += OnLibraryChanged;
         _ = RefreshAsync();
@@ -305,6 +309,7 @@ public partial class LibraryViewModel : PageViewModel
 
         var favoriteIds = await _libraryStore.GetFavoriteTrackIdsAsync();
         var categoryMap = await _libraryStore.GetTrackCategoryMapAsync();
+        var sourceNames = BuildSourceNameMap();
 
         if (SelectedFilter?.Kind == LibraryFilterKind.Favorites)
         {
@@ -319,6 +324,7 @@ public partial class LibraryViewModel : PageViewModel
                 IsFavorite = favoriteIds.Contains(track.Id),
                 DeleteCommand = DeleteTrackCommand,
                 CreateCategoryCommand = CreateCategoryAndAddCommand,
+                SourceName = ResolveSourceName(track, sourceNames),
             };
 
             row.SetCategories(_categories, categoryMap.GetValueOrDefault(track.Id) ?? []);
@@ -344,6 +350,37 @@ public partial class LibraryViewModel : PageViewModel
             _ = RefreshTracksAsync();
         }
     }
+
+    /// <summary>音源 Id → 显示名（本地 / FTP / SMB / WebDAV / Navidrome 取音源配置名）。</summary>
+    private Dictionary<string, string> BuildSourceNameMap()
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var source in _settings.Current.Sources)
+        {
+            map[source.Id] = source.DisplayName;
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// 行副标题里展示的音源名：在线曲目取数据源显示名（网易云等）；
+    /// 配置还在的取音源名；配置已删除的孤儿记录退回类型名，便于识别清理。
+    /// </summary>
+    private static string ResolveSourceName(Track track, Dictionary<string, string> sourceNames)
+        => track.SourceType == MusicSourceType.Online
+            ? OnlineSources.DisplayName(track.SourceId)
+            : sourceNames.GetValueOrDefault(track.SourceId) ?? SourceTypeFallbackName(track.SourceType);
+
+    private static string SourceTypeFallbackName(MusicSourceType type) => type switch
+    {
+        MusicSourceType.Local => "本地",
+        MusicSourceType.Ftp => "FTP",
+        MusicSourceType.Smb => "SMB",
+        MusicSourceType.WebDav => "WebDAV",
+        MusicSourceType.Navidrome => "Navidrome",
+        _ => "未知音源",
+    };
 
     /// <summary>曲库内容变化（扫描、删除音源、其它页面改收藏）可能在后台线程触发，统一切回 UI 线程刷新。</summary>
     private void OnLibraryChanged(object? sender, EventArgs e)
