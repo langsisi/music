@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Text;
 using Avalonia;
 using Avalonia.iOS;
 using Foundation;
@@ -43,14 +42,33 @@ public partial class AppDelegate : AvaloniaAppDelegate<App>
     /// <summary>把崩溃堆栈写到 <c>Documents/MusicData/crash.log</c>，方便在「文件」App 里取出。</summary>
     private static void WriteCrashLog(string source, Exception? exception)
     {
+        // 堆栈文本单独取：崩溃场景下什么都可能炸，exception.ToString() 自己抛异常也要兜住。
+        string dump;
         try
         {
-            var text = new StringBuilder()
-                .AppendLine($"==== {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} [{source}] ====")
-                .AppendLine(exception?.ToString() ?? "(没有异常对象)")
-                .AppendLine()
-                .ToString();
+            dump = exception?.ToString() ?? "(没有异常对象)";
+        }
+        catch (Exception ex)
+        {
+            dump = "(exception.ToString() 失败：" + ex.Message + ")";
+        }
 
+        // NSLog 先行：堆栈至少留在系统日志（爱思实时日志可见），文件写失败线索也不丢。
+        try
+        {
+            NSLog("%@", "CrashLog [" + source + "]: " + dump);
+        }
+        catch
+        {
+            // 连 NSLog 都失败就真的没通道了，放弃。
+        }
+
+        try
+        {
+            // 刻意不用 DateTimeOffset 格式化：崩溃可能正出在 ICU/culture 上，
+            // 崩溃日志自己再踩一次文化格式化就永远写不出来了。
+            var text = "==== [" + source + "] @ +" + Environment.TickCount64 + "ms ====\n"
+                     + dump + "\n\n";
             File.AppendAllText(Path.Combine(PlatformPaths.DataDir, "crash.log"), text);
         }
         catch (Exception)

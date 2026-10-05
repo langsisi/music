@@ -6,13 +6,19 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
 
+    <!-- 不依赖 ICU 全球化数据：真机 AOT/裁剪包曾疑似因 ICU 缺失导致 culture 格式化
+         抛异常（startup.log/crash.log 均未写出）。中文显示走 CoreText 不受影响，
+         全代码库无 GetCultureInfo/new CultureInfo 用法，改为不变全球化是安全的。 -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
     <!-- 版本号与 Core / Android 对齐；ApplicationId 会映射为 CFBundleIdentifier。
          发布时由 scripts/publish-release.ps1 用 -p:Version 覆盖。 -->
-    <Version>1.1.0</Version>
+    <!-- 1.1.1：真机黑屏排障版本，爱思应用列表可肉眼区分新旧包 -->
+    <Version>1.1.1</Version>
     <ApplicationTitle>ZMusic</ApplicationTitle>
     <ApplicationId>zhusl.music</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion>1.1.1</ApplicationDisplayVersion>
 
     <!-- 刻意不设 RuntimeIdentifier / RuntimeIdentifiers：
          设置后会让 dotnet build 默认按真机 RID 出包，模拟器调试（-t:Run）会失败。
