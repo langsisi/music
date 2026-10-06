@@ -1,8 +1,8 @@
 {
-    "version":  "1.2.5",
-    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.5/Music-1.2.5.zip",
-    "sha256":  "b7e5b2fecce41f3278dfa8e863d26739a9b832115c1a9bcdbc4c89bc2fdc8018",
-    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.5/Music-1.2.5.apk",
-    "androidSha256":  "70b9206b140376321a4e8a6e32632a6dbfb0fb5b0b27798fdf9315e40905c0e1",
-    "notes":  "编辑歌曲信息时可以同步回音源，编辑音源时如果删除音源不会残留曲目"
+    "version":  "1.2.6",
+    "url":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.6/Music-1.2.6.zip",
+    "sha256":  "8521ed2a34e006d5223504cf4a317d895b2e6de32af20f3ea6181162befb9f6c",
+    "androidUrl":  "https://www.294713.xyz/zhusenlin/Music/releases/download/v1.2.6/Music-1.2.6.apk",
+    "androidSha256":  "f540a9dfeb658c35e1c0bf23378502f4a1ddbb8e3ddf147044897a4d50bf574a",
+    "notes":  "增加qq音乐，支持设置cookie"
 }
