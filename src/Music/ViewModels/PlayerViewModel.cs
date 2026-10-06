@@ -1172,16 +1172,9 @@ public partial class PlayerViewModel : ViewModelBase
             CurrentLyricIndex));
 
         // 开启歌词广播后，把当前歌词行写进系统媒体的「专辑」字段，蓝牙耳机/车机即可显示。
-        // 关闭广播或没有歌词时传 null，平台层恢复真实专辑名。随每个进度 tick 检查，
+        // 关闭广播或整首没有歌词时传 null，平台层恢复真实专辑名。随每个进度 tick 检查，
         // 只有行变化（或开关变化）才真正推送，避免频繁刷元数据。
-        string? line = null;
-        if (_settings.Current.BroadcastEnabled
-            && CurrentLyricIndex >= 0
-            && CurrentLyricIndex < _lyricTexts.Count
-            && !string.IsNullOrWhiteSpace(_lyricTexts[CurrentLyricIndex]))
-        {
-            line = _lyricTexts[CurrentLyricIndex];
-        }
+        var line = _settings.Current.BroadcastEnabled ? FindBroadcastLine() : null;
 
         var lineKey = $"{track?.Id}|{line}";
         if (lineKey != _lastMediaLineKey)
@@ -1213,6 +1206,23 @@ public partial class PlayerViewModel : ViewModelBase
             _playback.IsPlaying,
             _playback.DurationSeconds,
             _playback.PositionSeconds));
+    }
+
+    /// <summary>
+    /// 取广播到系统媒体「专辑」字段的歌词行。空行（LRC 里常见的间奏占位）向前沿用最近一句，
+    /// 避免车机在两句歌词之间闪回专辑名；确实还没有唱到任何歌词时才返回 null。
+    /// </summary>
+    private string? FindBroadcastLine()
+    {
+        for (var index = Math.Min(CurrentLyricIndex, _lyricTexts.Count - 1); index >= 0; index--)
+        {
+            if (!string.IsNullOrWhiteSpace(_lyricTexts[index]))
+            {
+                return _lyricTexts[index];
+            }
+        }
+
+        return null;
     }
 
     private void OnSystemMediaCommand(object? sender, MediaControlCommand command)
