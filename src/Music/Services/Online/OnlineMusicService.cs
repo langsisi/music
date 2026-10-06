@@ -36,10 +36,10 @@ public sealed class OnlineMusicService
         "Taylor Swift", "Ed Sheeran", "Adele", "Coldplay", "Maroon 5", "A-Lin",
     ];
 
-    private readonly GdMusicClient _client;
+    private readonly OnlineMusicClient _client;
     private readonly Random _random = new();
 
-    public OnlineMusicService(GdMusicClient client) => _client = client;
+    public OnlineMusicService(OnlineMusicClient client) => _client = client;
 
     /// <summary>按关键词搜索在线曲目。</summary>
     public Task<IReadOnlyList<OnlineTrack>> SearchAsync(

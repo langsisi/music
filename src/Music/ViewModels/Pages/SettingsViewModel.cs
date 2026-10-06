@@ -8,6 +8,7 @@ using Music.Models;
 using Music.Services;
 using Music.Services.Broadcast;
 using Music.Services.Cache;
+using Music.Services.Security;
 using Music.Services.Update;
 
 namespace Music.ViewModels.Pages;
@@ -18,6 +19,7 @@ public partial class SettingsViewModel : PageViewModel
     private readonly IAudioCache _cache;
     private readonly LyricsBroadcastServer _broadcast;
     private readonly UpdateService _updates;
+    private readonly ISecretProtector _protector;
 
     /// <summary>构造期间赋值不应触发回写。</summary>
     private bool _loading;
@@ -27,12 +29,14 @@ public partial class SettingsViewModel : PageViewModel
         IAudioCache cache,
         LyricsBroadcastServer broadcast,
         UpdateService updates,
+        ISecretProtector protector,
         SourcesViewModel sources)
     {
         _settings = settings;
         _cache = cache;
         _broadcast = broadcast;
         _updates = updates;
+        _protector = protector;
         Sources = sources;
 
         ThemeOptions =
@@ -48,6 +52,7 @@ public partial class SettingsViewModel : PageViewModel
         CacheLimitMb = settings.Current.CacheLimitMb;
         BroadcastEnabled = settings.Current.BroadcastEnabled;
         BroadcastPort = settings.Current.BroadcastPort;
+        QqMusicCookie = Unprotect(settings.Current.QqMusicCookie);
         _loading = false;
 
         _ = RefreshCacheStatsAsync();
@@ -183,6 +188,31 @@ public partial class SettingsViewModel : PageViewModel
 
     [ObservableProperty]
     private string _broadcastUrlText = string.Empty;
+
+    // ---------------- QQ 音乐 ----------------
+
+    /// <summary>QQ 音乐 Cookie（明文编辑，落盘前加密）；留空只能播放免费曲的 128k。</summary>
+    [ObservableProperty]
+    private string _qqMusicCookie = string.Empty;
+
+    partial void OnQqMusicCookieChanged(string value)
+    {
+        OnPropertyChanged(nameof(QqCookieSummary));
+
+        if (_loading)
+        {
+            return;
+        }
+
+        _settings.Current.QqMusicCookie = _protector.Protect(value.Trim());
+        Save();
+    }
+
+    /// <summary>折叠头部右侧的摘要。</summary>
+    public string QqCookieSummary => string.IsNullOrWhiteSpace(QqMusicCookie) ? "未配置" : "已配置";
+
+    private string Unprotect(string? protectedText)
+        => string.IsNullOrWhiteSpace(protectedText) ? string.Empty : _protector.Unprotect(protectedText);
 
     public string VersionText => UpdateService.CurrentVersionText;
 

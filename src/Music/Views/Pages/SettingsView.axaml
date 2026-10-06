@@ -312,6 +312,37 @@
             </Border>
         </StackPanel>
 
+        <!-- ==================== QQ 音乐（折叠） ==================== -->
+        <StackPanel Spacing="8">
+            <TextBlock Text="QQ 音乐" Classes="group-label" Margin="2,0,0,0" />
+            <Border Classes="card" Padding="0">
+                <Expander Classes="cardexpander">
+                    <Expander.Header>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Path Grid.Column="0" Classes="seticon"
+                                  Data="{x:Static controls:AppIcons.MusicNote}"
+                                  Margin="0,0,14,0" />
+                            <TextBlock Grid.Column="1" Text="QQ 音乐 Cookie" FontSize="15"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding QqCookieSummary}"
+                                       FontSize="12.5" Classes="muted"
+                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                        </Grid>
+                    </Expander.Header>
+
+                    <StackPanel Margin="0,0,0,8">
+                        <TextBox Text="{Binding QqMusicCookie}" PasswordChar="●"
+                                 Margin="16,6,16,0"
+                                 PlaceholderText="uin=123456; qqmusic_key=..." />
+                        <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                                   Margin="16,10,16,0"
+                                   Text="在浏览器登录 QQ 音乐网页版后，把 Cookie 里含 uin 与 qqmusic_key 的部分填到这里，即可播放会员曲目与 320k / 无损音质；留空只能播放免费曲目的 128k。Cookie 会用本机密钥加密后保存，不会明文落盘。" />
+                    </StackPanel>
+                </Expander>
+            </Border>
+        </StackPanel>
+
         <!-- ==================== 在线升级（折叠） ==================== -->
         <StackPanel Spacing="8">
             <TextBlock Text="关于" Classes="group-label" Margin="2,0,0,0" />

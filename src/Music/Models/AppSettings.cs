@@ -29,4 +29,10 @@ public sealed class AppSettings
     /// 只播种一次，用户手动删除后不再自动加回来。
     /// </summary>
     public bool DefaultLocalFoldersSeeded { get; set; }
+
+    /// <summary>
+    /// QQ 音乐 Cookie（经 <c>ISecretProtector</c> 加密），用于播放会员曲目与高音质；
+    /// 留空则只能播放免费曲目的 128k。
+    /// </summary>
+    public string? QqMusicCookie { get; set; }
 }

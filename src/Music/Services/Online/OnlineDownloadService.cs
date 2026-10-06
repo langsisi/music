@@ -22,13 +22,13 @@ public sealed record OnlineDownloadTarget(string Id, string Name, MusicSourceCon
 /// </summary>
 public sealed class OnlineDownloadService
 {
-    private readonly GdMusicClient _client;
+    private readonly OnlineMusicClient _client;
     private readonly HttpClient _httpClient;
     private readonly IRemoteFileClientFactory _remoteClientFactory;
     private readonly ISettingsStore _settings;
 
     public OnlineDownloadService(
-        GdMusicClient client,
+        OnlineMusicClient client,
         HttpClient httpClient,
         IRemoteFileClientFactory remoteClientFactory,
         ISettingsStore settings)

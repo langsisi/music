@@ -98,8 +98,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IUpdateInstaller, UnsupportedUpdateInstaller>();
         services.AddSingleton<UpdateService>();
 
-        // 在线发现（GD 音乐台）：搜索 / 推荐 + 下载到指定音源
+        // 在线发现：搜索 / 推荐 + 下载到指定音源
+        // OnlineMusicClient 按 source 分发：QQ 走 TencentMusicClient 直连，其余走 GD 音乐台。
         services.AddSingleton<GdMusicClient>();
+        services.AddSingleton<TencentMusicClient>();
+        services.AddSingleton<OnlineMusicClient>();
         services.AddSingleton<OnlineMusicService>();
         services.AddSingleton<OnlineDownloadService>();
 

@@ -25,13 +25,13 @@ public sealed class CachedMediaResolver : IMediaResolver
     private const int OnlineBitrate = 320;
 
     private readonly IAudioCache _cache;
-    private readonly GdMusicClient _gd;
+    private readonly OnlineMusicClient _gd;
     private readonly RemoteMetadataEnricher _enricher;
     private readonly LocalMediaProxy _proxy;
 
     public CachedMediaResolver(
         IAudioCache cache,
-        GdMusicClient gd,
+        OnlineMusicClient gd,
         RemoteMetadataEnricher enricher,
         LocalMediaProxy proxy)
     {
