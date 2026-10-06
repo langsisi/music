@@ -20,6 +20,12 @@
 		<integer>2</integer>
 	</array>
 
+	<!-- 应用图标资源。.NET for iOS 是从 Info.plist 读这个键（ReadAppManifest 任务），
+	     再作为 --app-icon 传给 actool；写在 csproj 的 PropertyGroup 里完全无效，
+	     会导致 actool 不产图标、装完的应用没有图标。 -->
+	<key>XSAppIconAssets</key>
+	<string>Assets.xcassets/AppIcon.appiconset</string>
+
 	<!-- iOS 14+ 无需 storyboard 文件即可全屏启动；刻意不加 UIApplicationSceneManifest，
 	     AvaloniaAppDelegate 会自行管理 window/scene。 -->
 	<key>UILaunchScreen</key>

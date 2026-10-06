@@ -35,7 +35,8 @@
     <!-- 无 Apple 开发者账号时可在 Mac 上用 -p:CodesignKey="" 关闭签名做模拟器调试。 -->
     <CodesignKey>iPhone Developer</CodesignKey>
     <CodesignEntitlements>Entitlements.plist</CodesignEntitlements>
-    <XSAppIconAssets>Assets.xcassets/AppIcon.appiconset</XSAppIconAssets>
+    <!-- 应用图标不在这里配：.NET for iOS 只认 Info.plist 里的 XSAppIconAssets 键
+         （见 ReadAppManifest → ACTool 的传递链），设成 MSBuild 属性会被完全忽略。 -->
   </PropertyGroup>
 
   <!-- AOT / 裁剪：
