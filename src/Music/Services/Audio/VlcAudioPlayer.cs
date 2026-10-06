@@ -19,6 +19,7 @@ public sealed class VlcAudioPlayer : IAudioPlayer
     private LibVLC? _libVlc;
     private MediaPlayer? _mediaPlayer;
     private VlcMedia? _currentMedia;
+    private string? _currentSource;
     private readonly string? _initError;
 
     public VlcAudioPlayer()
@@ -112,6 +113,20 @@ public sealed class VlcAudioPlayer : IAudioPlayer
         _currentMedia = new VlcMedia(_libVlc, pathOrUrl, fromType);
         _currentMedia.AddOption(":no-video");
         _mediaPlayer.Media = _currentMedia;
+        _currentSource = pathOrUrl;
+    }
+
+    public void Restart()
+    {
+        if (_mediaPlayer is null || _currentSource is null)
+        {
+            return;
+        }
+
+        // 播完最后一帧后 libvlc 停在 Ended 状态：Seek 因不可定位而被忽略、Play 也不会从头开始，
+        // 必须重新装载同一地址再播，单曲循环才会真正重播。
+        Load(_currentSource);
+        _mediaPlayer.Play();
     }
 
     public void Play()

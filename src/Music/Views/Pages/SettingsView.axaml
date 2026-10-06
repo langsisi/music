@@ -11,6 +11,8 @@
              x:CompileBindings="True">
 
     <!-- 设置项统一为「分组卡片」：标签靠左，值/控件靠右；复杂参数折叠展示。 -->
+    <!-- 页面自带滚动容器：外壳只负责页头，这里整页滚动 -->
+    <ScrollViewer Classes="pagebody" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Spacing="20">
 
         <!-- ==================== 外观 ==================== -->
@@ -393,4 +395,5 @@
         </StackPanel>
 
     </StackPanel>
+    </ScrollViewer>
 </UserControl>

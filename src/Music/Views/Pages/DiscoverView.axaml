@@ -17,7 +17,7 @@
         <Style Selector="TextBlock.gdnote">
             <Setter Property="TextAlignment" Value="Center" />
         </Style>
-        <Style Selector="StackPanel.narrow TextBlock.gdnote">
+        <Style Selector="Border.narrow TextBlock.gdnote">
             <Setter Property="TextAlignment" Value="Left" />
         </Style>
 
@@ -33,10 +33,10 @@
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
-        <Style Selector="StackPanel.narrow Border.searchhost">
+        <Style Selector="Border.narrow Border.searchhost">
             <Setter Property="Grid.ColumnSpan" Value="2" />
         </Style>
-        <Style Selector="StackPanel.narrow Button.searchbtn">
+        <Style Selector="Border.narrow Button.searchbtn">
             <Setter Property="Grid.Row" Value="1" />
             <Setter Property="Grid.Column" Value="0" />
             <Setter Property="Grid.ColumnSpan" Value="2" />
@@ -54,12 +54,12 @@
         <Style Selector="Grid.optrow">
             <Setter Property="Margin" Value="0,0,18,0" />
         </Style>
-        <Style Selector="StackPanel.narrow Grid.optrow">
+        <Style Selector="Border.narrow Grid.optrow">
             <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
 
         <!-- 窄屏隐藏行内的下载状态，给歌名留出宽度（进度看顶部状态栏） -->
-        <Style Selector="StackPanel.narrow Border.rowstate">
+        <Style Selector="Border.narrow Border.rowstate">
             <Setter Property="IsVisible" Value="False" />
         </Style>
     </UserControl.Styles>
@@ -112,7 +112,10 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <StackPanel x:Name="RootPanel" Spacing="18">
+    <!-- 顶部（说明 + 搜索与状态）固定不动，只有搜索结果列表滚动 -->
+    <Border x:Name="RootBorder" Classes="pagebody">
+        <Grid RowDefinitions="Auto,*">
+        <StackPanel Grid.Row="0" Spacing="18">
 
         <!-- 说明放在搜索行上方 -->
         <TextBlock Classes="gdnote"
@@ -207,17 +210,23 @@
 
             </StackPanel>
         </Border>
+        </StackPanel>
 
-        <!-- ==================== 搜索结果 ==================== -->
-        <StackPanel Spacing="8" IsVisible="{Binding HasSearchResults}">
+        <!-- ==================== 搜索结果：只有列表滚动 ==================== -->
+        <Grid Grid.Row="1" Margin="0,18,0,0">
+        <ScrollViewer IsVisible="{Binding HasSearchResults}"
+                      HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="8">
             <TextBlock Text="搜索结果" Classes="section" Margin="2,0,0,0" />
             <Border Classes="card" Padding="8">
                 <ItemsControl ItemsSource="{Binding SearchResults}"
                               ItemTemplate="{StaticResource OnlineTrackRow}" />
             </Border>
         </StackPanel>
+        </ScrollViewer>
 
-        <Border Classes="card" Padding="24" IsVisible="{Binding ShowEmptyResultHint}">
+        <Border Classes="card" Padding="24" IsVisible="{Binding ShowEmptyResultHint}"
+                VerticalAlignment="Top">
             <StackPanel Spacing="6" HorizontalAlignment="Center">
                 <Path Data="{x:Static controls:AppIcons.Search}"
                       Fill="{DynamicResource TextTertiaryBrush}" Stretch="Uniform"
@@ -228,6 +237,8 @@
                            FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
             </StackPanel>
         </Border>
+        </Grid>
 
-    </StackPanel>
+        </Grid>
+    </Border>
 </UserControl>

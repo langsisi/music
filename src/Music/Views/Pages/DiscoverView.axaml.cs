@@ -20,7 +20,7 @@ public partial class DiscoverView : UserControl
     {
         var isNarrow = e.NewSize.Width < NarrowBreakpoint;
 
-        RootPanel.Classes.Set("narrow", isNarrow);
+        RootBorder.Classes.Set("narrow", isNarrow);
 
         // UniformGrid.Columns 不响应样式设置器，只能在这里直接赋值。
         OptionsGrid.Columns = isNarrow ? 1 : 3;

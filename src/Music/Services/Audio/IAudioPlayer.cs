@@ -46,4 +46,11 @@ public interface IAudioPlayer : IDisposable
     void Stop();
 
     void Seek(long positionMs);
+
+    /// <summary>
+    /// 从头重新播放当前已装载的媒体（单曲循环用）。
+    /// 播放自然结束后播放器处于「已结束」状态，此时 <see cref="Seek"/> 与 <see cref="Play"/> 都可能无效，
+    /// 实现需重新装载同一地址再播，保证真正回到开头。
+    /// </summary>
+    void Restart();
 }

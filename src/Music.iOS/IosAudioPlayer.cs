@@ -23,6 +23,7 @@ internal sealed class IosAudioPlayer : NSObject, IAudioPlayer
 
     private AVPlayer? _player;
     private AVPlayerItem? _item;
+    private string? _currentSource;
 
     private NSObject? _timeObserver;
     private NSObject? _endObserver;
@@ -91,6 +92,7 @@ internal sealed class IosAudioPlayer : NSObject, IAudioPlayer
         // 换曲前必须彻底拆掉上一首的观察者，否则回调会打到已释放的 item 上导致崩溃。
         DetachItem();
         _lastDurationMs = 0;
+        _currentSource = pathOrUrl;
 
         if (!IosAudioFormatSupport.IsSupported(pathOrUrl))
         {
@@ -121,6 +123,19 @@ internal sealed class IosAudioPlayer : NSObject, IAudioPlayer
         }
 
         AttachItem(item);
+    }
+
+    public void Restart()
+    {
+        if (_currentSource is null)
+        {
+            return;
+        }
+
+        // AVPlayer 播到结尾后停在末尾，直接 Play() 会立刻再次结束；重新装载同一地址再播，
+        // 单曲循环才会真正从头重播。
+        Load(_currentSource);
+        Play();
     }
 
     public void Play()

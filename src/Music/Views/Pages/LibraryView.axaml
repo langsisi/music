@@ -10,6 +10,8 @@
              x:DataType="pages:LibraryViewModel"
              x:CompileBindings="True">
 
+    <!-- 页面自带滚动容器：外壳只负责页头，这里整页滚动 -->
+    <ScrollViewer Classes="pagebody" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Spacing="14">
 
         <!-- 搜索：全宽圆角填充搜索框（参考音流） -->
@@ -324,4 +326,5 @@
         </Border>
 
     </StackPanel>
+    </ScrollViewer>
 </UserControl>

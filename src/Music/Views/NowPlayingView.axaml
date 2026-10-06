@@ -147,13 +147,31 @@
             </Grid>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
-                <!-- 播放模式：顺序 → 随机 → 列表循环 → 单曲循环，一个按钮循环切换 -->
+                <!-- 播放模式：随机 → 列表循环 → 单曲循环，一个按钮循环切换 -->
                 <Button Classes="icon toggle" Classes.active="{Binding Player.IsPlayModeActive}"
                         Command="{Binding Player.CyclePlayModeCommand}"
                         ToolTip.Tip="{Binding Player.PlayModeText}">
-                    <Path Data="{Binding Player.PlayModeIcon}"
-                          Fill="{Binding $parent[Button].Foreground}"
-                          Width="26" Height="26" Stretch="Uniform" />
+                    <!-- 固定 26×26 容器，与相邻的上一首/下一首图标同尺寸，按钮不缩水。
+                         各 Path 的宽高按几何包围盒给（随机 16×16、循环 18×20），并按同比例放大，
+                         这样三种图标线条粗细一致、居中且不被拉伸变形。 -->
+                    <Grid Width="26" Height="26"
+                          HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Path Data="{x:Static controls:AppIcons.Shuffle}"
+                              IsVisible="{Binding Player.IsShuffleMode}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              Fill="{Binding $parent[Button].Foreground}"
+                              Width="21" Height="21" Stretch="Uniform" />
+                        <Path Data="{x:Static controls:AppIcons.Repeat}"
+                              IsVisible="{Binding Player.IsRepeatAllMode}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              Fill="{Binding $parent[Button].Foreground}"
+                              Width="23.4" Height="26" Stretch="Uniform" />
+                        <Path Data="{x:Static controls:AppIcons.RepeatOne}"
+                              IsVisible="{Binding Player.IsRepeatOneMode}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              Fill="{Binding $parent[Button].Foreground}"
+                              Width="23.4" Height="26" Stretch="Uniform" />
+                    </Grid>
                 </Button>
                 <Button Classes="icon" Command="{Binding Player.PreviousCommand}">
                     <Path Data="{x:Static controls:AppIcons.SkipPrevious}"
@@ -194,12 +212,20 @@
                     Background="{DynamicResource AppBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderSubtleBrush}"
                     BorderThickness="1,0,0,0">
-                <Grid RowDefinitions="Auto,*">
+                <Grid RowDefinitions="Auto,Auto,*">
 
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,12,8,8">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="16,12,8,8">
                         <TextBlock Grid.Column="0" Text="播放列表" Classes="section"
                                    VerticalAlignment="Center" />
+                        <!-- 把当前临时播放表整体保存成一个新分类 -->
                         <Button Grid.Column="1" Classes="icon"
+                                Command="{Binding Player.ToggleQueueSaveCommand}"
+                                ToolTip.Tip="保存为歌单">
+                            <Path Data="{x:Static controls:AppIcons.PlaylistAdd}"
+                                  Fill="{DynamicResource TextPrimaryBrush}"
+                                  Width="22" Height="15.4" Stretch="Uniform" />
+                        </Button>
+                        <Button Grid.Column="2" Classes="icon"
                                 Command="{Binding Player.ToggleQueueCommand}"
                                 ToolTip.Tip="关闭">
                             <Path Data="{x:Static controls:AppIcons.Close}"
@@ -208,7 +234,20 @@
                         </Button>
                     </Grid>
 
-                    <ListBox Grid.Row="1" ItemsSource="{Binding Player.QueueItems}"
+                    <StackPanel Grid.Row="1" IsVisible="{Binding Player.IsQueueSaveOpen}"
+                                Margin="16,0,16,10" Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox Grid.Column="0" Text="{Binding Player.NewQueuePlaylistName}"
+                                     PlaceholderText="新歌单名称" />
+                            <Button Grid.Column="1" Classes="accent small" Margin="10,0,0,0"
+                                    Command="{Binding Player.SaveQueueAsPlaylistCommand}"
+                                    Content="保存" />
+                        </Grid>
+                        <TextBlock Text="{Binding Player.QueueSaveStatusText}" Classes="muted"
+                                   FontSize="12" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <ListBox Grid.Row="2" ItemsSource="{Binding Player.QueueItems}"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.Styles>
@@ -226,33 +265,45 @@
                         </ListBox.Styles>
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:QueueItemViewModel">
-                                <Button Classes="bare" HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Stretch" Padding="0"
-                                        Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).Player.PlayQueueItemCommand}"
-                                        CommandParameter="{Binding}">
-                                    <Grid Classes="queueitem" Classes.current="{Binding IsCurrent}"
-                                          ColumnDefinitions="Auto,*,Auto" Height="50" Margin="8,1">
-                                        <Border Grid.Column="0" Width="38" Height="38" CornerRadius="7"
-                                                ClipToBounds="True" VerticalAlignment="Center"
-                                                Background="{DynamicResource AccentSoftBrush}">
-                                            <Image Stretch="UniformToFill"
-                                                   Source="{Binding CoverPath, Converter={StaticResource PathToBitmap}}" />
-                                        </Border>
-                                        <StackPanel Grid.Column="1" Margin="10,0" Spacing="1"
-                                                    VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding DisplayTitle}" FontSize="13"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       Foreground="{DynamicResource TextPrimaryBrush}" />
-                                            <TextBlock Text="{Binding Subtitle}" FontSize="11.5"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       Foreground="{DynamicResource TextSecondaryBrush}" />
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="2" Text="{Binding DurationText}"
-                                                   FontSize="11.5" VerticalAlignment="Center"
-                                                   Margin="6,0,0,0"
-                                                   Foreground="{DynamicResource TextTertiaryBrush}" />
-                                    </Grid>
-                                </Button>
+                                <Grid Classes="queueitem" Classes.current="{Binding IsCurrent}"
+                                      ColumnDefinitions="*,Auto" Height="50" Margin="8,1">
+                                    <!-- 点整行跳转播放 -->
+                                    <Button Grid.Column="0" Classes="bare" Padding="0"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                            Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).Player.PlayQueueItemCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" Height="50">
+                                            <Border Grid.Column="0" Width="38" Height="38" CornerRadius="7"
+                                                    ClipToBounds="True" VerticalAlignment="Center"
+                                                    Background="{DynamicResource AccentSoftBrush}">
+                                                <Image Stretch="UniformToFill"
+                                                       Source="{Binding CoverPath, Converter={StaticResource PathToBitmap}}" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Margin="10,0" Spacing="1"
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding DisplayTitle}" FontSize="13"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                                                <TextBlock Text="{Binding Subtitle}" FontSize="11.5"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2" Text="{Binding DurationText}"
+                                                       FontSize="11.5" VerticalAlignment="Center"
+                                                       Margin="6,0,0,0"
+                                                       Foreground="{DynamicResource TextTertiaryBrush}" />
+                                        </Grid>
+                                    </Button>
+                                    <!-- 从临时播放表移除（不动曲库与源文件） -->
+                                    <Button Grid.Column="1" Classes="icon"
+                                            Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).Player.RemoveQueueItemCommand}"
+                                            CommandParameter="{Binding}"
+                                            ToolTip.Tip="从播放列表移除">
+                                        <Path Data="{x:Static controls:AppIcons.Close}"
+                                              Fill="{DynamicResource TextTertiaryBrush}"
+                                              Width="14" Height="14" Stretch="Uniform" />
+                                    </Button>
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>

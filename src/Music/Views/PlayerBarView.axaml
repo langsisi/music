@@ -57,13 +57,29 @@
                             VerticalAlignment="Center" Spacing="2">
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
-                        <!-- 播放模式：顺序 → 随机 → 列表循环 → 单曲循环，一个按钮循环切换 -->
+                        <!-- 播放模式：随机 → 列表循环 → 单曲循环，一个按钮循环切换 -->
                         <Button Classes="icon toggle" Classes.active="{Binding Player.IsPlayModeActive}"
                                 Command="{Binding Player.CyclePlayModeCommand}"
                                 ToolTip.Tip="{Binding Player.PlayModeText}">
-                            <Path Data="{Binding Player.PlayModeIcon}"
-                                  Fill="{Binding $parent[Button].Foreground}"
-                                  Width="20" Height="20" Stretch="Uniform" />
+                            <!-- 固定 20×20 容器；各图标的宽高都按几何包围盒给，保证等比例、居中、不拉伸 -->
+                            <Grid Width="20" Height="20"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Path Data="{x:Static controls:AppIcons.Shuffle}"
+                                      IsVisible="{Binding Player.IsShuffleMode}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Fill="{Binding $parent[Button].Foreground}"
+                                      Width="16" Height="16" Stretch="Uniform" />
+                                <Path Data="{x:Static controls:AppIcons.Repeat}"
+                                      IsVisible="{Binding Player.IsRepeatAllMode}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Fill="{Binding $parent[Button].Foreground}"
+                                      Width="18" Height="20" Stretch="Uniform" />
+                                <Path Data="{x:Static controls:AppIcons.RepeatOne}"
+                                      IsVisible="{Binding Player.IsRepeatOneMode}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Fill="{Binding $parent[Button].Foreground}"
+                                      Width="18" Height="20" Stretch="Uniform" />
+                            </Grid>
                         </Button>
 
                         <Button Classes="icon" Command="{Binding Player.PreviousCommand}"

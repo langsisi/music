@@ -194,7 +194,7 @@ public partial class PlayerViewModel : ViewModelBase
     public Geometry VolumeIcon => IsMuted ? AppIcons.VolumeMute : AppIcons.VolumeUp;
 
     /// <summary>
-    /// 播放模式：顺序 → 随机 → 列表循环 → 单曲循环，界面上由一个按钮循环切换。
+    /// 播放模式：随机 → 列表循环 → 单曲循环，界面上由一个按钮循环切换。
     /// 播放服务内部仍是「洗牌开关 + 循环模式」两个字段，这里只做组合映射。
     /// </summary>
     public PlayMode PlayMode
@@ -209,8 +209,7 @@ public partial class PlayerViewModel : ViewModelBase
             return _playback.RepeatMode switch
             {
                 RepeatMode.One => PlayMode.RepeatOne,
-                RepeatMode.All => PlayMode.RepeatAll,
-                _ => PlayMode.Sequential,
+                _ => PlayMode.RepeatAll,
             };
         }
         set
@@ -230,29 +229,32 @@ public partial class PlayerViewModel : ViewModelBase
 
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsPlayModeActive));
-            OnPropertyChanged(nameof(PlayModeIcon));
+            OnPropertyChanged(nameof(IsShuffleMode));
+            OnPropertyChanged(nameof(IsRepeatAllMode));
+            OnPropertyChanged(nameof(IsRepeatOneMode));
             OnPropertyChanged(nameof(PlayModeText));
         }
     }
 
-    /// <summary>非「顺序播放」时按钮高亮，表示随机或循环已开启。</summary>
-    public bool IsPlayModeActive => PlayMode != PlayMode.Sequential;
+    /// <summary>默认的列表循环不高亮；切到随机或单曲循环时高亮，让点击有明确反馈。</summary>
+    public bool IsPlayModeActive => PlayMode != PlayMode.RepeatAll;
 
-    /// <summary>按钮图标随模式变化；顺序播放用未高亮的循环图标。</summary>
-    public Geometry PlayModeIcon => PlayMode switch
-    {
-        PlayMode.Shuffle => AppIcons.Shuffle,
-        PlayMode.RepeatOne => AppIcons.RepeatOne,
-        _ => AppIcons.Repeat,
-    };
+    /// <summary>
+    /// 三种模式各用一个独立 Path 呈现，尺寸按各自几何包围盒设定：
+    /// 随机是 16×16 方形，循环/单曲是 18×20 竖长形，避免被方框拉伸而大小不一。
+    /// </summary>
+    public bool IsShuffleMode => PlayMode == PlayMode.Shuffle;
+
+    public bool IsRepeatAllMode => PlayMode == PlayMode.RepeatAll;
+
+    public bool IsRepeatOneMode => PlayMode == PlayMode.RepeatOne;
 
     /// <summary>当前模式名，用于按钮提示。</summary>
     public string PlayModeText => PlayMode switch
     {
         PlayMode.Shuffle => "随机播放",
-        PlayMode.RepeatAll => "列表循环",
         PlayMode.RepeatOne => "单曲循环",
-        _ => "顺序播放",
+        _ => "列表循环",
     };
 
     /// <summary>
@@ -291,6 +293,17 @@ public partial class PlayerViewModel : ViewModelBase
 
     /// <summary>队列内容签名，用于避免随播放进度每帧重建队列列表。</summary>
     private string _queueSignature = string.Empty;
+
+    /// <summary>「保存为歌单」输入区是否展开。</summary>
+    [ObservableProperty]
+    private bool _isQueueSaveOpen;
+
+    /// <summary>保存临时播放表时输入的新歌单名称。</summary>
+    [ObservableProperty]
+    private string _newQueuePlaylistName = string.Empty;
+
+    [ObservableProperty]
+    private string _queueSaveStatusText = string.Empty;
 
     // ---------------- 歌词 ----------------
 
@@ -396,10 +409,9 @@ public partial class PlayerViewModel : ViewModelBase
     {
         PlayMode = PlayMode switch
         {
-            PlayMode.Sequential => PlayMode.Shuffle,
             PlayMode.Shuffle => PlayMode.RepeatAll,
             PlayMode.RepeatAll => PlayMode.RepeatOne,
-            _ => PlayMode.Sequential,
+            _ => PlayMode.Shuffle,
         };
     }
 
@@ -420,6 +432,49 @@ public partial class PlayerViewModel : ViewModelBase
 
     [RelayCommand]
     private Task PlayQueueItem(QueueItemViewModel item) => _playback.PlayAtAsync(item.Index);
+
+    /// <summary>把曲目从临时播放表移除（不影响曲库与源文件）。</summary>
+    [RelayCommand]
+    private Task RemoveQueueItem(QueueItemViewModel item) => _playback.RemoveAtAsync(item.Index);
+
+    [RelayCommand]
+    private void ToggleQueueSave()
+    {
+        IsQueueSaveOpen = !IsQueueSaveOpen;
+        QueueSaveStatusText = string.Empty;
+    }
+
+    /// <summary>把当前临时播放表整体保存成一个新分类（歌单）。</summary>
+    [RelayCommand]
+    private async Task SaveQueueAsPlaylist()
+    {
+        var name = NewQueuePlaylistName.Trim();
+        var tracks = _playback.Queue.ToList();
+        if (name.Length == 0 || tracks.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var created = await _libraryStore.CreateCategoryAsync(name).ConfigureAwait(true);
+
+            foreach (var track in tracks)
+            {
+                // 在线曲目先落库，归类关系才查得出来。
+                await EnsureLibraryTrackAsync(track).ConfigureAwait(true);
+                await _libraryStore.AddTrackToCategoryAsync(created.Id, track.Id).ConfigureAwait(true);
+            }
+
+            NewQueuePlaylistName = string.Empty;
+            IsQueueSaveOpen = false;
+            QueueSaveStatusText = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            QueueSaveStatusText = $"保存失败：{ex.Message}";
+        }
+    }
 
     // ---------------- 曲目操作弹层 ----------------
 
@@ -1205,7 +1260,9 @@ public partial class PlayerViewModel : ViewModelBase
         OnPropertyChanged(nameof(VolumeIcon));
         OnPropertyChanged(nameof(PlayMode));
         OnPropertyChanged(nameof(IsPlayModeActive));
-        OnPropertyChanged(nameof(PlayModeIcon));
+        OnPropertyChanged(nameof(IsShuffleMode));
+        OnPropertyChanged(nameof(IsRepeatOneMode));
+        OnPropertyChanged(nameof(IsRepeatAllMode));
         OnPropertyChanged(nameof(PlayModeText));
         OnPropertyChanged(nameof(CanDownload));
         OnPropertyChanged(nameof(CanDelete));
@@ -1240,15 +1297,12 @@ public partial class PlayerViewModel : ViewModelBase
 /// <summary>播放模式（界面上由一个按钮循环切换）。后端由洗牌开关与循环模式两个字段组合表达。</summary>
 public enum PlayMode
 {
-    /// <summary>顺序播放：不随机、不循环。</summary>
-    Sequential = 0,
-
     /// <summary>随机播放。</summary>
-    Shuffle = 1,
+    Shuffle = 0,
 
-    /// <summary>列表循环。</summary>
-    RepeatAll = 2,
+    /// <summary>列表循环（默认）。</summary>
+    RepeatAll = 1,
 
     /// <summary>单曲循环。</summary>
-    RepeatOne = 3,
+    RepeatOne = 2,
 }

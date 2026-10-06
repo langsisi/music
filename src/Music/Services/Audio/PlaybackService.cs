@@ -78,7 +78,7 @@ public sealed class PlaybackService : IDisposable
 
     public bool IsShuffleEnabled { get; set; }
 
-    public RepeatMode RepeatMode { get; set; } = RepeatMode.Off;
+    public RepeatMode RepeatMode { get; set; } = RepeatMode.All;
 
     /// <summary>最近一次播放错误，供界面提示。</summary>
     public string? LastError { get; private set; }
@@ -136,6 +136,42 @@ public sealed class PlaybackService : IDisposable
 
         _currentIndex = index;
         await PlayCurrentAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 从当前播放队列（临时播放表）中移除指定位置的曲目。
+    /// 移除的不是当前曲目时只更新队列；移除当前曲目时自动接播后一首（已是最后一首则接播新的最后一首）。
+    /// </summary>
+    public async Task RemoveAtAsync(int index)
+    {
+        if (index < 0 || index >= _queue.Count)
+        {
+            return;
+        }
+
+        var removedCurrent = index == _currentIndex;
+        _queue.RemoveAt(index);
+
+        if (_queue.Count == 0)
+        {
+            _currentIndex = -1;
+            RaiseChanged();
+            return;
+        }
+
+        if (removedCurrent)
+        {
+            _currentIndex = Math.Min(index, _queue.Count - 1);
+            await PlayCurrentAsync().ConfigureAwait(true);
+            return;
+        }
+
+        if (index < _currentIndex)
+        {
+            _currentIndex--;
+        }
+
+        RaiseChanged();
     }
 
     public void TogglePlay()
@@ -347,8 +383,8 @@ public sealed class PlaybackService : IDisposable
 
         if (RepeatMode == RepeatMode.One)
         {
-            _player.Seek(0);
-            _player.Play();
+            // 播完最后一帧后播放器已处于「已结束」状态，Seek + Play 不一定能重启，交给播放器重装媒体。
+            _player.Restart();
             RaiseChanged();
             return;
         }

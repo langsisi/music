@@ -186,12 +186,17 @@ public partial class DiscoverViewModel : PageViewModel, IOnlineTrackHost
 
         item.IsDownloading = true;
         item.DownloadText = "下载中…";
-        StatusText = string.Empty;
+        // 窄屏隐藏了行内状态，进度同步到顶部状态栏，点完立刻能看到反馈。
+        StatusText = $"正在下载「{item.DisplayTitle}」…";
 
         try
         {
             var bitrate = SelectedBitrate?.Value ?? 320;
-            var progress = new Progress<double>(value => item.DownloadText = $"下载中… {value * 100:0}%");
+            var progress = new Progress<double>(value =>
+            {
+                item.DownloadText = $"下载中… {value * 100:0}%";
+                StatusText = $"正在下载「{item.DisplayTitle}」… {value * 100:0}%";
+            });
 
             var location = await _download
                 .DownloadAsync(item.Track, target, bitrate, progress)

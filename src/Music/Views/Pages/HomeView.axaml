@@ -41,6 +41,8 @@
         </DataTemplate>
     </UserControl.Resources>
 
+    <!-- 页面自带滚动容器：外壳只负责页头，这里整页滚动 -->
+    <ScrollViewer Classes="pagebody" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Spacing="24">
 
         <!-- ==================== 每日推荐 ==================== -->
@@ -246,4 +248,5 @@
         </StackPanel>
 
     </StackPanel>
+    </ScrollViewer>
 </UserControl>

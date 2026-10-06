@@ -28,6 +28,13 @@
             <Style Selector="Grid.compact ScrollViewer.pagebody">
                 <Setter Property="Padding" Value="16,0,16,20" />
             </Style>
+            <!-- 自滚动页面（顶部固定、只滚列表）用 Border 承担同样的页面留白 -->
+            <Style Selector="Border.pagebody">
+                <Setter Property="Padding" Value="28,0,28,28" />
+            </Style>
+            <Style Selector="Grid.compact Border.pagebody">
+                <Setter Property="Padding" Value="16,0,16,20" />
+            </Style>
         </Grid.Styles>
 
         <!-- ==================== 主区域：导航 + 内容 ==================== -->
@@ -76,7 +83,7 @@
                 </DockPanel>
             </Border>
 
-            <!-- 内容区：外壳提供统一的页头，页面只负责自己的内容 -->
+            <!-- 内容区：外壳提供统一的页头，滚动由页面自己负责（自带 scroll 容器或固定顶部） -->
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
                 <StackPanel Grid.Row="0" Classes="pagehead" Spacing="4">
                     <TextBlock Classes="h1" Text="{Binding CurrentPage.Title}" />
@@ -84,10 +91,10 @@
                                Text="{Binding CurrentPage.Description}" />
                 </StackPanel>
 
-                <ScrollViewer Grid.Row="1" Classes="pagebody"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <ContentControl Content="{Binding CurrentPage}" />
-                </ScrollViewer>
+                <!-- 页面自带滚动容器，须撑满内容区高度才能正确滚动 -->
+                <ContentControl Grid.Row="1" Content="{Binding CurrentPage}"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch" />
             </Grid>
 
         </Grid>
