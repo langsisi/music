@@ -120,7 +120,10 @@ jobs:
   # 从侧面指认真机问题是 AOT/裁剪/ICU 相关。
   simulator-smoke:
     runs-on: macos-latest
-    timeout-minutes: 60
+    # MtouchLink=None 后不再裁剪，模拟器构建实测 49.8~59.3 分钟（TrimMode=partial
+    # 时只要 16.1 分钟），60 分钟上限会在「Build simulator app」步骤里被超时取消。
+    # 与 build-ipa 一样放宽到 4 小时。
+    timeout-minutes: 240
 
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.5.app
