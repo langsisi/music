@@ -21,15 +21,25 @@ public sealed class PlaybackService : IDisposable
     /// <summary>本地代理地址的前缀，用于判断当前播放是否走代理，以便失败时回退。</summary>
     private const string ProxyUrlPrefix = "http://127.0.0.1:";
 
+    /// <summary>导航播报等「可闪避」场景下，暂时把音量压到的比例。</summary>
+    private const double DuckFactor = 0.2;
+
     private readonly IAudioPlayer _player;
     private readonly IMediaResolver _resolver;
     private readonly IAudioCache _cache;
     private readonly LocalMediaProxy _proxy;
+    private readonly IAudioFocusService _focus;
     private readonly List<Track> _queue = [];
     private readonly List<Track> _recent = [];
     private readonly Random _random = new();
     private int _currentIndex = -1;
     private bool _disposed;
+
+    /// <summary>期望音量（0..100）。闪避时只改引擎的实际音量，不动这里，避免界面滑块跟着跳动。</summary>
+    private int _volume = 100;
+
+    /// <summary>当前是否处于音频焦点闪避（导航播报）状态。</summary>
+    private bool _ducked;
 
     /// <summary>当前解析/缓冲请求；切歌时取消上一个，避免旧结果覆盖新曲目。</summary>
     private CancellationTokenSource? _resolveCts;
@@ -44,17 +54,20 @@ public sealed class PlaybackService : IDisposable
         IAudioPlayer player,
         IMediaResolver resolver,
         IAudioCache cache,
-        LocalMediaProxy proxy)
+        LocalMediaProxy proxy,
+        IAudioFocusService focus)
     {
         _player = player;
         _resolver = resolver;
         _cache = cache;
         _proxy = proxy;
+        _focus = focus;
 
         _player.PlaybackEnded += OnPlaybackEnded;
         _player.PlaybackFailed += OnPlaybackFailed;
         _player.PositionChanged += OnPositionChanged;
         _player.DurationChanged += OnDurationChanged;
+        _focus.FocusChanged += OnAudioFocusChanged;
     }
 
     /// <summary>曲目、播放状态、进度或时长发生变化。</summary>
@@ -91,10 +104,17 @@ public sealed class PlaybackService : IDisposable
 
     public int Volume
     {
-        get => _player.Volume;
+        get => _volume;
         set
         {
-            _player.Volume = value;
+            var clamped = Math.Clamp(value, 0, 100);
+            if (clamped == _volume)
+            {
+                return;
+            }
+
+            _volume = clamped;
+            ApplyVolume();
             RaiseChanged();
         }
     }
@@ -184,9 +204,11 @@ public sealed class PlaybackService : IDisposable
         if (_player.IsPlaying)
         {
             _player.Pause();
+            _focus.AbandonFocus();
         }
         else
         {
+            AcquireFocus();
             _player.Play();
         }
 
@@ -246,6 +268,8 @@ public sealed class PlaybackService : IDisposable
         _player.PlaybackFailed -= OnPlaybackFailed;
         _player.PositionChanged -= OnPositionChanged;
         _player.DurationChanged -= OnDurationChanged;
+        _focus.FocusChanged -= OnAudioFocusChanged;
+        _focus.AbandonFocus();
         _player.Dispose();
     }
 
@@ -307,6 +331,7 @@ public sealed class PlaybackService : IDisposable
         {
             _currentSource = source;
             _player.Load(source);
+            AcquireFocus();
             _player.Play();
             LastError = null;
             RecordRecent(track);
@@ -392,6 +417,8 @@ public sealed class PlaybackService : IDisposable
         var isLast = _currentIndex >= _queue.Count - 1;
         if (isLast && !IsShuffleEnabled && RepeatMode == RepeatMode.Off)
         {
+            // 队列播完停下，音频焦点一并交还，避免占着焦点影响其它应用。
+            _focus.AbandonFocus();
             RaiseChanged();
             return;
         }
@@ -422,6 +449,77 @@ public sealed class PlaybackService : IDisposable
     private void OnPositionChanged(object? sender, long positionMs) => RaiseChanged();
 
     private void OnDurationChanged(object? sender, long lengthMs) => RaiseChanged();
+
+    /// <summary>把期望音量（或闪避后的音量）应用到播放引擎。</summary>
+    private void ApplyVolume()
+        => _player.Volume = _ducked ? (int)Math.Round(_volume * DuckFactor) : _volume;
+
+    /// <summary>申请音频焦点，并确保退出闪避状态（手动恢复播放时用）。</summary>
+    private void AcquireFocus()
+    {
+        if (_ducked)
+        {
+            _ducked = false;
+            ApplyVolume();
+        }
+
+        _focus.RequestFocus();
+    }
+
+    /// <summary>
+    /// 音频焦点变化：导航播报（可闪避）时压低音量，播报结束恢复；来电等暂时丢失则暂停。
+    /// 事件可能来自系统线程，统一切回 UI 线程处理。
+    /// </summary>
+    private void OnAudioFocusChanged(object? sender, AudioFocusChange change)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            switch (change)
+            {
+                case AudioFocusChange.LossTransientCanDuck:
+                    // 只降音量，不暂停：导航播报结束会再收到 Gain。
+                    _ducked = true;
+                    ApplyVolume();
+                    break;
+
+                case AudioFocusChange.Gain:
+                    if (_ducked)
+                    {
+                        _ducked = false;
+                        ApplyVolume();
+                    }
+
+                    break;
+
+                case AudioFocusChange.Loss:
+                    // 焦点被永久夺走，交还并停播。
+                    _focus.AbandonFocus();
+                    PauseForFocusLoss();
+                    break;
+
+                case AudioFocusChange.LossTransient:
+                    PauseForFocusLoss();
+                    break;
+            }
+        });
+    }
+
+    /// <summary>因失去焦点而暂停：先恢复期望音量，再暂停播放（播报/通话结束后由用户手动继续）。</summary>
+    private void PauseForFocusLoss()
+    {
+        if (_ducked)
+        {
+            _ducked = false;
+            ApplyVolume();
+        }
+
+        if (_player.IsPlaying)
+        {
+            _player.Pause();
+        }
+
+        RaiseChanged();
+    }
 
     private void RaiseChanged()
     {

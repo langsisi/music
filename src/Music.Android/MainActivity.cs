@@ -19,11 +19,15 @@ public class MainActivity : AvaloniaMainActivity
     /// <summary>读取音乐文件运行时权限的请求码。</summary>
     private const int StoragePermissionRequestCode = 1001;
 
+    /// <summary>通知权限（Android 13+）的请求码。</summary>
+    private const int NotificationPermissionRequestCode = 1002;
+
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
 
         RequestStoragePermission();
+        RequestNotificationPermission();
     }
 
     /// <summary>
@@ -36,11 +40,30 @@ public class MainActivity : AvaloniaMainActivity
             ? Manifest.Permission.ReadMediaAudio
             : Manifest.Permission.ReadExternalStorage;
 
+        RequestPermissionIfNeeded(permission, StoragePermissionRequestCode);
+    }
+
+    /// <summary>
+    /// Android 13+ 发通知需要 POST_NOTIFICATIONS 授权，用于通知栏 / 锁屏的「正在播放」控制条。
+    /// 未授权时仅不显示控制条，播放本身不受影响。
+    /// </summary>
+    private void RequestNotificationPermission()
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(33))
+        {
+            return;
+        }
+
+        RequestPermissionIfNeeded(Manifest.Permission.PostNotifications, NotificationPermissionRequestCode);
+    }
+
+    private void RequestPermissionIfNeeded(string permission, int requestCode)
+    {
         if (CheckSelfPermission(permission) == Permission.Granted)
         {
             return;
         }
 
-        RequestPermissions([permission], StoragePermissionRequestCode);
+        RequestPermissions([permission], requestCode);
     }
 }

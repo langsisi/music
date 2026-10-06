@@ -21,7 +21,7 @@
 	</array>
 
 	<!-- 应用图标资源。.NET for iOS 是从 Info.plist 读这个键（ReadAppManifest 任务），
-	     再作为 --app-icon 传给 actool；写在 csproj 的 PropertyGroup 里完全无效，
+	     再作为 app-icon 参数传给 actool；写在 csproj 的 PropertyGroup 里完全无效，
 	     会导致 actool 不产图标、装完的应用没有图标。 -->
 	<key>XSAppIconAssets</key>
 	<string>Assets.xcassets/AppIcon.appiconset</string>

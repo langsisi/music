@@ -67,6 +67,8 @@ public static class ServiceCollectionExtensions
         // EXCLUDE_LIBVLC（iOS 构建）：不注册 VlcAudioPlayer，由平台 head 提供唯一实现。
         services.AddSingleton<IAudioPlayer, VlcAudioPlayer>();
 #endif
+        // 音频焦点：默认不协商；Android head 会覆盖成 AudioManager 实现（导航播报闪避、来电暂停）。
+        services.AddSingleton<IAudioFocusService, NoopAudioFocusService>();
         // 本地 HTTP 代理：FTP/SMB/WebDAV 曲目边下边播（不可用时自动回退到整文件下载）。
         services.AddSingleton<LocalMediaProxy>();
         services.AddSingleton<IMediaResolver, CachedMediaResolver>();

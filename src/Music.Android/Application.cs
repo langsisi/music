@@ -3,6 +3,7 @@ using Android.Runtime;
 using Avalonia;
 using Avalonia.Android;
 using Microsoft.Extensions.DependencyInjection;
+using Music.Services.Audio;
 using Music.Services.Security;
 using Music.Services.SystemMedia;
 using Music.Services.Update;
@@ -43,6 +44,8 @@ namespace Music.Android
             AppHost.Configure(services =>
             {
                 services.AddSingleton<ISystemMediaService, AndroidSystemMediaService>();
+                // 音频焦点：导航播报时闪避（压低音量），来电等暂时丢失时暂停。
+                services.AddSingleton<IAudioFocusService, AndroidAudioFocusService>();
                 // 私有仓库令牌用系统 Keystore 加密；升级时下载 apk 并拉起系统安装器。
                 services.AddSingleton<ISecretProtector, KeystoreSecretProtector>();
                 services.AddSingleton<IUpdateInstaller, AndroidUpdateInstaller>();
