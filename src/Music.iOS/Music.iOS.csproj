@@ -61,18 +61,50 @@
     <ProjectReference Include="..\Music\Music.csproj" AdditionalProperties="ExcludeLibVlc=true" />
   </ItemGroup>
 
-  <!-- LibVLCSharp 兜底剥离。
-       AdditionalProperties 只能到达内层编译（EXCLUDE_LIBVLC 宏生效），传不进内层
-       NuGet restore——Music/obj/project.assets.json 仍含 LibVLCSharp，于是这个
-       无代码引用的孤儿程序集一直躺在发布清单里。原先 TrimMode=partial 时 ILLink
-       会把它整个裁掉，掩盖了泄漏；改 MtouchLink=None 后它存活到原生链接，
-       其 @rpath/DynamicMobileVLCKit.framework P/Invoke 触发
-       -framework DynamicMobileVLCKit → ld: framework not found（真机/模拟器通杀）。
-       在发布清单生成后直接剥离，不再依赖裁剪行为或 restore 属性流。 -->
-  <Target Name="_StripLibVlcFromPublishList" AfterTargets="ComputeResolvedFileToPublishList">
+  <!-- LibVLCSharp 的双重兜底剥离。
+
+       背景：ExcludeLibVlc 经 ProjectReference 的 AdditionalProperties 只能影响内层
+       「编译」（EXCLUDE_LIBVLC 宏生效），传不进内层 NuGet restore——实测
+       Music/obj/project.assets.json 里始终有 LibVLCSharp，于是这个无人引用的
+       孤儿程序集一直躺在发布清单里。原先 TrimMode=partial 时 ILLink 顺手把它整个
+       裁掉，掩盖了泄漏；改成 MtouchLink=None 后它存活到 xamarin 链接器，其
+       @rpath/DynamicMobileVLCKit.framework P/Invoke 让链接器自动追加
+       -framework DynamicMobileVLCKit，而仓库从不引用 VideoLAN.LibVLC.iOS
+       → ld: framework 'DynamicMobileVLCKit' not found（真机/模拟器通杀）。
+
+       1) _IosDropLibVlcFromPublishGraph：在 ILLink 计算链接输入前把 LibVLCSharp
+          摘出发布清单。ManagedAssemblyToLink 由 ResolvedFileToPublish 派生
+          （Microsoft.NET.ILLink.targets 的 _ComputeManagedAssemblyToLink），
+          摘掉后链接器根本扫不到该 P/Invoke。
+       2) _IosDropVlcFrameworkFromLinker：万一框架名仍从别的途径注入，在 clang++
+          之前把 DynamicMobileVLCKit 从链接框架列表剔除。iOS 播放走 AVFoundation
+          （VlcAudioPlayer.cs 已被 Compile Remove），不链该框架语义正确。 -->
+  <Target Name="_IosDropLibVlcFromPublishGraph"
+          AfterTargets="ComputeResolvedFilesToPublishList">
     <ItemGroup>
-      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
-                             Condition="'%(ResolvedFileToPublish.NuGetPackageId)' == 'LibVLCSharp'" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)' == 'LibVLCSharp'" />
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)' == 'LibVLCSharp'" />
     </ItemGroup>
+    <Message Importance="high" Text="[iOS] LibVLCSharp 已从发布清单剥离（若存在）" />
+  </Target>
+
+  <Target Name="_IosDropLibVlcFromLinkInputs" AfterTargets="_ComputeManagedAssemblyToLink">
+    <ItemGroup>
+      <ManagedAssemblyToLink Remove="@(ManagedAssemblyToLink)" Condition="'%(Filename)' == 'LibVLCSharp'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_IosDropVlcFrameworkFromLinker" BeforeTargets="_LinkNativeExecutable">
+    <ItemGroup>
+      <_LinkerFrameworks Remove="@(_LinkerFrameworks)"
+                          Condition="$([System.String]::Copy('%(Identity)').Contains('DynamicMobileVLCKit'))" />
+      <_NativeExecutableFrameworks Remove="@(_NativeExecutableFrameworks)"
+                                    Condition="$([System.String]::Copy('%(Identity)').Contains('DynamicMobileVLCKit'))" />
+      <_BindingLibraryFrameworks Remove="@(_BindingLibraryFrameworks)"
+                                  Condition="$([System.String]::Copy('%(Identity)').Contains('DynamicMobileVLCKit'))" />
+      <_MainLinkWith Remove="@(_MainLinkWith)"
+                     Condition="$([System.String]::Copy('%(Identity)').Contains('DynamicMobileVLCKit'))" />
+    </ItemGroup>
+    <Message Importance="high" Text="[iOS] 已从链接框架列表剔除 DynamicMobileVLCKit（若存在）" />
   </Target>
 </Project>
